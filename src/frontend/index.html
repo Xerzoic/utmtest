@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GXSave - Behavioural Finance for GXBank</title>
+  <link rel="stylesheet" href="/styles/main.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <div id="authScreen" class="auth-screen">
+      <div class="auth-container">
+        <div class="auth-logo">
+          <span class="logo-icon">GX</span>
+          <span class="logo-text">Save</span>
+        </div>
+        <h1 class="auth-title">Welcome to GXSave</h1>
+        <p class="auth-subtitle">Smart savings powered by behavioural finance</p>
+
+        <div id="loginForm" class="auth-form">
+          <h2>Login</h2>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="loginEmail" placeholder="Enter your email" value="aisha.rahman@email.com">
+          </div>
+          <button class="btn-primary full-width" onclick="login()">Login</button>
+          <p class="auth-switch">Don't have an account? <a href="#" onclick="showRegister()">Register</a></p>
+          <button class="btn-demo full-width" onclick="demoLogin()">Try Demo Mode</button>
+        </div>
+
+        <div id="registerForm" class="auth-form" style="display:none">
+          <h2>Register</h2>
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="regName" placeholder="Your full name">
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="regEmail" placeholder="your@email.com">
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input type="tel" id="regPhone" placeholder="+60123456789">
+          </div>
+          <div class="form-group">
+            <label>Monthly Income (RM)</label>
+            <input type="number" id="regIncome" placeholder="5000">
+          </div>
+          <button class="btn-primary full-width" onclick="register()">Register</button>
+          <p class="auth-switch">Already have an account? <a href="#" onclick="showLogin()">Login</a></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="mainApp" style="display:none">
+      <header class="header">
+        <div class="header-left">
+          <div class="logo">
+            <span class="logo-icon">GX</span>
+            <span class="logo-text">Save</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <button id="nudgeBtn" class="icon-btn" onclick="toggleNudgePanel()">
+            <span class="icon">🔔</span>
+            <span id="nudgeCount" class="badge" style="display:none">0</span>
+          </button>
+          <div class="user-avatar" id="userAvatar">?</div>
+        </div>
+      </header>
+
+      <nav class="bottom-nav">
+        <button class="nav-item active" onclick="showTab('dashboard')">
+          <span class="nav-icon">🏠</span>
+          <span class="nav-label">Home</span>
+        </button>
+        <button class="nav-item" onclick="showTab('goals')">
+          <span class="nav-icon">🎯</span>
+          <span class="nav-label">Goals</span>
+        </button>
+        <button class="nav-item" onclick="showTab('insights')">
+          <span class="nav-icon">🧠</span>
+          <span class="nav-label">Insights</span>
+        </button>
+        <button class="nav-item" onclick="showTab('autosave')">
+          <span class="nav-icon">⚡</span>
+          <span class="nav-label">Auto-Save</span>
+        </button>
+        <button class="nav-item" onclick="showTab('social')">
+          <span class="nav-icon">👥</span>
+          <span class="nav-label">Social</span>
+        </button>
+      </nav>
+
+      <main class="content">
+        <div id="dashboardTab" class="tab-content active">
+          <section class="hero-card">
+            <div class="hero-greeting">
+              <p class="greeting" id="greetingTime">Good morning,</p>
+              <h1 class="user-name" id="heroName">...</h1>
+            </div>
+            <div class="hero-stats">
+              <div class="hero-stat">
+                <p class="stat-label">Total Saved</p>
+                <p class="stat-value" id="totalSavings">RM 0</p>
+              </div>
+              <div class="hero-stat">
+                <p class="stat-label">This Month</p>
+                <p class="stat-value stat-positive" id="monthlySpending">RM 0</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="streak-card">
+            <div class="streak-visual">
+              <div class="streak-fire">🔥</div>
+              <div class="streak-info">
+                <p class="streak-count"><span id="streakCount">0</span> day streak</p>
+                <p class="streak-best">Best: <span id="bestStreak">0</span> days</p>
+              </div>
+            </div>
+            <div class="streak-calendar" id="streakCalendar"></div>
+          </section>
+
+          <section class="gamification-section" id="gamificationProfile"></section>
+
+          <section class="nudges-section">
+            <h2 class="section-title">Today's Nudges</h2>
+            <div id="nudgeList" class="nudge-list">
+              <p class="empty-state">No nudges yet</p>
+            </div>
+          </section>
+
+          <section class="spending-section">
+            <h2 class="section-title">Spending Breakdown</h2>
+            <div id="spendingChart" class="spending-chart">
+              <p class="empty-state">No spending data yet</p>
+            </div>
+          </section>
+
+          <section class="budgets-section">
+            <h2 class="section-title">Monthly Budgets</h2>
+            <div id="budgetList" class="budget-list">
+              <p class="empty-state">No budgets set</p>
+            </div>
+          </section>
+
+          <section class="quick-actions">
+            <h2 class="section-title">Quick Actions</h2>
+            <div class="action-grid">
+              <button class="action-btn" onclick="showTab('autosave')">
+                <span class="action-icon">⚡</span>
+                <span class="action-label">Enable Round-Up</span>
+              </button>
+              <button class="action-btn" onclick="openNewGoalModal()">
+                <span class="action-icon">🎯</span>
+                <span class="action-label">New Goal</span>
+              </button>
+              <button class="action-btn" onclick="showTab('social')">
+                <span class="action-icon">👥</span>
+                <span class="action-label">Join Group</span>
+              </button>
+              <button class="action-btn" onclick="loadInsights()">
+                <span class="action-icon">🧠</span>
+                <span class="action-label">Analyse Spending</span>
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <div id="goalsTab" class="tab-content">
+          <div class="tab-header">
+            <h2>Savings Goals</h2>
+            <button class="btn-primary" onclick="openNewGoalModal()">+ New Goal</button>
+          </div>
+          <div id="goalsList" class="goals-list">
+            <p class="empty-state">No goals yet. Create your first savings goal!</p>
+          </div>
+        </div>
+
+        <div id="insightsTab" class="tab-content">
+          <div class="tab-header">
+            <h2>AI Insights</h2>
+            <button class="btn-secondary" onclick="loadInsights()">Refresh</button>
+          </div>
+          <div id="insightsContent" class="insights-content">
+            <p class="empty-state">Click Refresh to generate AI insights</p>
+          </div>
+        </div>
+
+        <div id="autosaveTab" class="tab-content">
+          <div class="tab-header">
+            <h2>Auto-Save Rules</h2>
+            <button class="btn-primary" onclick="openNewRuleModal()">+ New Rule</button>
+          </div>
+          <div class="autosave-hero">
+            <p class="autosave-subtitle">Set it and forget it. Your savings grow automatically.</p>
+          </div>
+          <div id="rulesList" class="rules-list">
+            <p class="empty-state">No auto-save rules. Create one to start saving automatically!</p>
+          </div>
+        </div>
+
+        <div id="socialTab" class="tab-content">
+          <div class="tab-header">
+            <h2>Savings Groups</h2>
+            <button class="btn-primary" onclick="openNewGroupModal()">+ Create Group</button>
+          </div>
+          <div id="groupsList" class="goals-list">
+            <p class="empty-state">No groups yet. Create or join a savings group!</p>
+          </div>
+          <div id="leaderboard" class="leaderboard-section" style="display:none">
+            <h3 class="section-title">Leaderboard</h3>
+            <div id="leaderboardList" class="leaderboard-list"></div>
+          </div>
+        </div>
+      </main>
+
+      <div id="nudgePanel" class="nudge-panel">
+        <div class="nudge-panel-header">
+          <h3>Notifications</h3>
+          <button class="close-btn" onclick="toggleNudgePanel()">✕</button>
+        </div>
+        <div id="nudgePanelList" class="nudge-panel-list">
+          <p class="empty-state">No notifications</p>
+        </div>
+      </div>
+
+      <div id="newGoalModal" class="modal">
+        <div class="modal-content">
+          <h2>Create New Goal</h2>
+          <form id="newGoalForm" onsubmit="createGoal(event)">
+            <label>Goal Name</label>
+            <input type="text" id="goalName" placeholder="e.g. Emergency Fund" required>
+            <label>Target Amount (RM)</label>
+            <input type="number" id="goalAmount" placeholder="10000" required>
+            <label>Deadline</label>
+            <input type="date" id="goalDeadline" required>
+            <label>Category</label>
+            <select id="goalCategory">
+              <option value="emergency">Emergency</option>
+              <option value="travel">Travel</option>
+              <option value="vehicle">Vehicle</option>
+              <option value="education">Education</option>
+              <option value="electronics">Electronics</option>
+              <option value="home">Home</option>
+              <option value="other">Other</option>
+            </select>
+            <div class="modal-actions">
+              <button type="button" class="btn-secondary" onclick="closeModal('newGoalModal')">Cancel</button>
+              <button type="submit" class="btn-primary">Create Goal</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div id="newRuleModal" class="modal">
+        <div class="modal-content">
+          <h2>New Auto-Save Rule</h2>
+          <form id="newRuleForm" onsubmit="createRule(event)">
+            <label>Rule Type</label>
+            <select id="ruleTypeSelect" onchange="updateRuleFields()">
+              <option value="round_up">Round-Up Savings</option>
+              <option value="salary_trigger">Salary Trigger</option>
+              <option value="fixed_schedule">Fixed Schedule</option>
+            </select>
+            <div id="ruleConfigFields">
+              <p class="config-hint">Round up every transaction to the nearest RM1. The difference goes to savings!</p>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn-secondary" onclick="closeModal('newRuleModal')">Cancel</button>
+              <button type="submit" class="btn-primary">Activate Rule</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div id="newGroupModal" class="modal">
+        <div class="modal-content">
+          <h2>Create Savings Group</h2>
+          <form id="newGroupForm" onsubmit="createGroup(event)">
+            <label>Group Name</label>
+            <input type="text" id="groupName" placeholder="e.g. Emergency Fund Crew" required>
+            <label>Description</label>
+            <input type="text" id="groupDesc" placeholder="We save together!">
+            <label>Goal Type</label>
+            <select id="groupGoalType">
+              <option value="emergency">Emergency Fund</option>
+              <option value="travel">Travel</option>
+              <option value="other">Other</option>
+            </select>
+            <label>Target Amount (RM, optional)</label>
+            <input type="number" id="groupTarget" placeholder="15000">
+            <div class="modal-actions">
+              <button type="button" class="btn-secondary" onclick="closeModal('newGroupModal')">Cancel</button>
+              <button type="submit" class="btn-primary">Create Group</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/scripts/app.js"></script>
+</body>
+</html>
