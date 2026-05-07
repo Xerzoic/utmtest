@@ -46,11 +46,14 @@ async function notifyUser(userId, data) {
 }
 
 cron.schedule('0 9 * * 1', async () => {
-  console.log('Running weekly nudges...')
+  console.log('Running weekly AI summaries...')
   const users = await db.query('SELECT id FROM users')
   for (const user of users.rows) {
-    const recap = await nudgeEngine.generateWeeklyRecap(user.id)
-    await notifyUser(user.id, recap)
+    try {
+      await aiEngine.generateWeeklySummary(user.id)
+    } catch (e) {
+      console.error('Weekly summary failed for user', user.id, e.message)
+    }
   }
 })
 

@@ -603,7 +603,9 @@ async function createGroup(e) {
 
   if (data) {
     closeModal("newGroupModal");
-    alert("Group created!");
+    document.getElementById("newGroupForm").reset();
+    showNudgeToast({ title: "Clan Created!", message: "Your new savings clan is ready", priority: "normal" });
+    loadSocialTab();
   }
 }
 
@@ -1129,6 +1131,19 @@ function groupCard(g, isMember) {
   "</div>";
 }
 
+async function aiSuggestBudgets() {
+  const data = await api("/ai/suggest-budgets");
+  if (!data) return;
+  for (const item of data) {
+    await api("/ai/action", {
+      method: "POST",
+      body: JSON.stringify({ action: "create_budget", category: item.category, limit: item.limit }),
+    });
+  }
+  showNudgeToast({ title: "Budgets Suggested!", message: "AI-optimised budgets have been set", priority: "normal" });
+  loadDashboard();
+}
+
 async function aiCreateBudget(category, limit) {
   var data = await api("/ai/action", {
     method: "POST",
@@ -1380,6 +1395,38 @@ function openDayDetail(dateStr) {
 
 function closeDayDetail() {
   document.getElementById("dayDetailPanel").classList.remove("open");
+}
+
+function openAIChat() {
+  document.getElementById("aiChatOverlay").classList.add("open");
+  const messages = document.getElementById("aiChatMessages");
+  messages.innerHTML = "<div class='chat-msg'><div class='chat-msg-bubble'>Hi! I'm GuGa, your AI financial assistant. Ask me anything about your finances!</div></div>";
+}
+
+function closeAIChat() {
+  document.getElementById("aiChatOverlay").classList.remove("open");
+}
+
+async function sendAIChat() {
+  const input = document.getElementById("aiChatInput");
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = "";
+  const messages = document.getElementById("aiChatMessages");
+  messages.innerHTML += "<div class='chat-msg chat-msg-own'><div class='chat-msg-bubble'>" + msg + "</div></div>";
+  messages.innerHTML += "<div class='chat-msg'><div class='chat-msg-bubble'>...</div></div>";
+  messages.scrollTop = messages.scrollHeight;
+  const data = await api("/ai/chat", {
+    method: "POST",
+    body: JSON.stringify({ message: msg }),
+  });
+  messages.removeChild(messages.lastChild);
+  if (data && data.reply) {
+    messages.innerHTML += "<div class='chat-msg'><div class='chat-msg-bubble'>" + data.reply + "</div></div>";
+  } else {
+    messages.innerHTML += "<div class='chat-msg'><div class='chat-msg-bubble'>Sorry, I'm having trouble. Please try again.</div></div>";
+  }
+  messages.scrollTop = messages.scrollHeight;
 }
 
 document.addEventListener("DOMContentLoaded", init);

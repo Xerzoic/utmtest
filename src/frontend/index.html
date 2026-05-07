@@ -150,7 +150,10 @@
           </section>
 
           <section class="budgets-section">
-            <h2 class="section-title">Monthly Budgets</h2>
+            <div class="budgets-header">
+              <h2 class="section-title">Monthly Budgets</h2>
+              <button class="btn-secondary btn-sm" onclick="aiSuggestBudgets()">AI Suggest</button>
+            </div>
             <div id="budgetList" class="budget-list">
               <p class="empty-state">No budgets set</p>
             </div>
@@ -191,6 +194,10 @@
               <button class="action-btn" onclick="showTab('insights')">
                 <span class="action-icon">🧠</span>
                 <span class="action-label">Analyse Spending</span>
+              </button>
+              <button class="action-btn action-btn-ai" onclick="openAIChat()">
+                <span class="action-icon">🤖</span>
+                <span class="action-label">AI Chat</span>
               </button>
             </div>
             <h3 class="action-category">👥 Social</h3>
@@ -493,6 +500,18 @@
         </div>
         <div id="advisorContent" class="advisor-content">
           <p class="empty-state">Loading advice...</p>
+        </div>
+      </div>
+
+      <div id="aiChatOverlay" class="ai-chat-overlay">
+        <div class="ai-chat-header">
+          <button onclick="closeAIChat()">← Back</button>
+          <h2>🤖 GuGa AI</h2>
+        </div>
+        <div id="aiChatMessages" class="ai-chat-messages"></div>
+        <div class="ai-chat-input">
+          <input type="text" id="aiChatInput" placeholder="Ask me about your finances...">
+          <button onclick="sendAIChat()">Send</button>
         </div>
       </div>
     </div>

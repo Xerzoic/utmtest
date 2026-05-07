@@ -1,10 +1,18 @@
 const path = require('path')
 const Database = require('better-sqlite3')
+const { SQL_SCHEMA } = require('./sqlite-schema')
 
 const dbPath = path.join(__dirname, '..', '..', 'guga.db')
 const db = new Database(dbPath)
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
+
+const statements = SQL_SCHEMA.split(';').filter(s => s.trim().length > 10)
+for (const statement of statements) {
+  if (statement.trim()) {
+    db.exec(statement + ';')
+  }
+}
 
 function toSQLite(sql) {
   let result = sql

@@ -1,7 +1,7 @@
 const db = require('../database/connection')
 const config = require('../config')
 const nudgeEngine = require('./NudgeEngine')
-const ilmuAIService = require('./IlmuAIService')
+const youraiService = require('./YourAIService')
 
 class GamificationEngine {
   constructor() {
@@ -321,6 +321,7 @@ class GamificationEngine {
   }
 
   async updateQuestProgress(userId, questKey, value) {
+    await this.generateDailyQuests(userId)
     const today = new Date().toISOString().split('T')[0]
     const quest = await db.query(
       `SELECT * FROM daily_quests WHERE user_id = $1 AND quest_key = $2 AND quest_date = $3`,
@@ -388,7 +389,7 @@ class GamificationEngine {
   }
 
   async triggerNPCResponse(groupId) {
-    if (Math.random() > 0.3) return
+    if (Math.random() > 0.5) return
     const npcs = await db.query(
       `SELECT u.id, u.full_name FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = $1 AND u.is_npc = 1`,
       [groupId]
@@ -398,7 +399,7 @@ class GamificationEngine {
     const groupInfo = await db.query(`SELECT name FROM savings_groups WHERE id = $1`, [groupId])
     const groupName = groupInfo.rows[0]?.name || 'savings group'
     try {
-      const reply = await ilmuAIService.generateNPCMessage(npc.full_name, groupName)
+      const reply = await youraiService.generateNPCMessage(npc.full_name, groupName)
       if (reply) {
         await db.query(
           `INSERT INTO group_messages (id, group_id, user_id, message)
@@ -407,7 +408,7 @@ class GamificationEngine {
         )
       }
     } catch (e) {
-      // NPC reply failed silently
+      console.error('NPC reply error:', e.message)
     }
   }
 

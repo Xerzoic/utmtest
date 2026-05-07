@@ -328,11 +328,11 @@ class DashboardController {
     try {
       const userId = req.user.id
       const groups = await db.query(
-        `SELECT sg.*, COUNT(gm.id) as member_count,
+        `SELECT sg.*,
+         (SELECT COUNT(*) FROM group_members WHERE group_id = sg.id) as member_count,
          EXISTS(SELECT 1 FROM group_members WHERE group_id = sg.id AND user_id = $1) as is_member
          FROM savings_groups sg
-         LEFT JOIN group_members gm ON gm.group_id = sg.id
-         GROUP BY sg.id ORDER BY sg.created_at DESC`, [userId])
+         ORDER BY sg.created_at DESC`, [userId])
       res.json(groups.rows)
     } catch (error) { res.status(500).json({ error: error.message }) }
   }
@@ -722,6 +722,47 @@ class DashboardController {
       res.json(analysis)
     } catch (error) {
       res.status(500).json({ error: error.message })
+    }
+  }
+
+  async aiChat(req, res) {
+    try {
+      const userId = req.user.id
+      const { message } = req.body
+      const user = await db.query(`SELECT * FROM users WHERE id = $1`, [userId])
+      const analysis = await aiEngine.analyseSpendingPatterns(userId, 30)
+      const goals = await db.query(`SELECT name, target_amount, current_amount FROM goals WHERE user_id = $1 AND is_active = true`, [userId])
+      const streak = await db.query(`SELECT current_streak FROM savings_streaks WHERE user_id = $1`, [userId])
+
+      const context = `User: ${user.rows[0].full_name}, Income: RM${user.rows[0].monthly_income}/month, Monthly spending: RM${analysis.monthlyAverage.toFixed(0)}, Savings streak: ${streak.rows[0]?.current_streak || 0} days, Goals: ${goals.rows.map(g => g.name + ' RM'+g.current_amount+'/'+g.target_amount).join(', ')}`
+
+      const youraiService = require('../services/YourAIService')
+      const reply = await youraiService.chat(
+        `You are GuGa, a friendly Malaysian financial advisor chatbot for the GuGa Saves app. You have access to the user's real financial data. Be concise (2-3 sentences max), practical, and encouraging. Use RM currency. Occasionally use Manglish. Context: ${context}`,
+        message
+      )
+      res.json({ reply })
+    } catch (error) {
+      res.json({ reply: "Sorry, I'm having trouble connecting right now. Try again in a moment!" })
+    }
+  }
+
+  async aiSuggestBudgets(req, res) {
+    const userId = req.user.id
+    const analysis = await aiEngine.analyseSpendingPatterns(userId, 60)
+    const user = await db.query(`SELECT monthly_income FROM users WHERE id = $1`, [userId])
+    const income = user.rows[0]?.monthly_income || 0
+
+    const youraiService = require('../services/YourAIService')
+    const raw = await youraiService.chat(
+      'You are a budget advisor. Respond ONLY in valid JSON array format.',
+      `Income: RM${income}/month. Current spending by category: ${Object.entries(analysis.categoryBreakdown).map(([k,v]) => k+': RM'+v.total.toFixed(0)).join(', ')}. Suggest monthly budget limits for each category. Respond as JSON: [{"category":"...","limit":number,"reason":"..."}]`
+    )
+    try {
+      res.json(JSON.parse(raw))
+    } catch {
+      const cats = Object.keys(analysis.categoryBreakdown)
+      res.json(cats.map(c => ({ category: c, limit: Math.round(income * 0.15), reason: 'Default 15% allocation' })))
     }
   }
 }

@@ -26,10 +26,10 @@ module.exports = {
     apiKey: process.env.OPENAI_API_KEY || 'sk-placeholder',
     model: process.env.OPENAI_MODEL || 'gpt-4',
   },
-  ilmuAI: {
-    apiKey: process.env.ZAI_API_KEY || '',
-    baseUrl: process.env.ZAI_BASE_URL || 'https://api.ilmu.ai/v1',
-    model: process.env.ZAI_MODEL || 'ilmu-glm-5.1',
+  yourai: {
+    apiKey: process.env.YOURAI_API_KEY || '',
+    baseUrl: process.env.YOURAI_BASE_URL || 'https://api.ilmu.ai/v1',
+    model: process.env.YOURAI_MODEL || 'ilmu-glm-5.1',
   },
   nudges: {
     spendingAlertThreshold: 0.8,

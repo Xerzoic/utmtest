@@ -42,6 +42,8 @@ router.post('/quests/:questKey/complete', dashboardController.completeQuest)
 
 router.get('/advice', dashboardController.getPersonalisedAdvice)
 
+router.post('/ai/chat', dashboardController.aiChat)
+router.get('/ai/suggest-budgets', dashboardController.aiSuggestBudgets)
 router.post('/ai/action', dashboardController.handleAIAction)
 router.get('/badges', dashboardController.getAllBadges)
 router.get('/analytics/spending', dashboardController.getSpendingAnalysis)

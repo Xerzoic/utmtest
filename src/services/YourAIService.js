@@ -1,15 +1,15 @@
 const config = require('../config')
 
-class IlmuAIService {
+class YourAIService {
   async chat(systemPrompt, userMessage) {
-    const res = await fetch(config.ilmuAI.baseUrl + '/chat/completions', {
+    const res = await fetch(config.yourai.baseUrl + '/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + config.ilmuAI.apiKey,
+        'Authorization': 'Bearer ' + config.yourai.apiKey,
       },
       body: JSON.stringify({
-        model: config.ilmuAI.model,
+        model: config.yourai.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -30,4 +30,4 @@ class IlmuAIService {
   }
 }
 
-module.exports = new IlmuAIService()
+module.exports = new YourAIService()

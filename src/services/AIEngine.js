@@ -1,7 +1,7 @@
 const db = require('../database/connection')
 const config = require('../config')
 const nudgeEngine = require('./NudgeEngine')
-const ilmuAI = require('./IlmuAIService')
+const yourai = require('./YourAIService')
 
 class AIEngine {
   constructor() {
@@ -392,7 +392,7 @@ Goals: ${goals.rows.map(g => g.name + ' (RM'+g.current_amount+'/'+g.target_amoun
 Respond in JSON: {"summary":"...","tips":[{"title":"...","message":"...","priority":"high|medium|low"}],"risks":[{"message":"...","severity":"high|medium"}]}`
 
     try {
-      const raw = await ilmuAI.chat(
+      const raw = await yourai.chat(
         'You are a Malaysian financial advisor AI. Respond ONLY in valid JSON. Use RM currency. Be specific.',
         prompt
       )
@@ -407,8 +407,19 @@ Respond in JSON: {"summary":"...","tips":[{"title":"...","message":"...","priori
         cached: false,
       }
     } catch (e) {
+      console.error('AI insight generation failed, using fallback:', e.message)
       return await this.generatePersonalisedInsights(userId)
     }
+  }
+
+  async generateWeeklySummary(userId) {
+    const analysis = await this.analyseSpendingPatterns(userId, 7)
+    const user = await db.query(`SELECT * FROM users WHERE id = $1`, [userId])
+    const reply = await yourai.chat(
+      'You are a financial summary bot. Write a 2-sentence weekly recap. Be encouraging.',
+      `User spent RM${analysis.totalSpent.toFixed(0)} this week across ${Object.keys(analysis.categoryBreakdown).length} categories. Top: ${Object.entries(analysis.categoryBreakdown).slice(0,3).map(([k,v]) => k+': RM'+v.total.toFixed(0)).join(', ')}.`
+    )
+    await nudgeEngine.createNudge(userId, 'weekly_recap', 'Your Weekly Recap', reply, { priority: 'normal' })
   }
 
   getInsightNudgeTitle(health) {
