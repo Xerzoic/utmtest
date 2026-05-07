@@ -13,6 +13,9 @@ router.post('/goals', dashboardController.createGoal)
 router.get('/transactions', dashboardController.getTransactions)
 router.post('/transactions', dashboardController.addTransaction)
 
+router.post('/expenditures', dashboardController.addDailyExpenditure)
+router.get('/expenditures', dashboardController.getDailyExpenditures)
+
 router.get('/autosave/rules', dashboardController.getAutoSaveRules)
 router.post('/autosave/rules', dashboardController.createAutoSaveRule)
 router.patch('/autosave/rules/:ruleId', dashboardController.toggleAutoSaveRule)

@@ -186,6 +186,20 @@ CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, t
 CREATE INDEX IF NOT EXISTS idx_nudges_user_unread ON nudges(user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_goals_user_active ON goals(user_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_autosave_rules_user ON autosave_rules(user_id, is_active);
+
+-- Daily expenditure submissions
+CREATE TABLE IF NOT EXISTS daily_expenditures (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  amount REAL NOT NULL,
+  category TEXT NOT NULL,
+  note TEXT,
+  expenditure_date TEXT NOT NULL DEFAULT (date('now')),
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_expenditures_user_date
+  ON daily_expenditures(user_id, expenditure_date DESC);
 `
 
 module.exports = { SQL_SCHEMA: SQL_SCHEMA_PG }

@@ -296,6 +296,66 @@ class DashboardController {
     }
   }
 
+  async addDailyExpenditure(req, res) {
+    try {
+      const userId = req.user.id
+      const { amount, category, note, expenditure_date } = req.body
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'Amount must be greater than 0' })
+      }
+
+      const allowedCategories = ['food', 'transport', 'shopping', 'entertainment', 'bills', 'health', 'education', 'groceries', 'other']
+      if (!allowedCategories.includes(category)) {
+        return res.status(400).json({ error: 'Invalid category' })
+      }
+
+      const result = await db.query(
+        `INSERT INTO daily_expenditures (id, user_id, amount, category, note, expenditure_date)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, COALESCE($5, date('now'))) RETURNING *`,
+        [userId, amount, category, note || null, expenditure_date]
+      )
+
+      const txnResult = await db.query(
+        `INSERT INTO transactions (user_id, gxbank_txn_id, amount, type, category, merchant, description, transaction_date)
+         VALUES ($1, $2, $3, 'debit', $4, 'Manual Entry', $5, COALESCE($6, date('now'))) RETURNING *`,
+        [userId, `EXP-${Date.now()}`, amount, category, note || 'Daily expenditure', expenditure_date]
+      )
+
+      const txn = txnResult.rows[0]
+      await autoSaveEngine.executeRoundUp(txn.id)
+      await nudgeEngine.checkBudgetAlerts(userId)
+
+      res.status(201).json(result.rows[0])
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async getDailyExpenditures(req, res) {
+    try {
+      const userId = req.user.id
+      const date = req.query.date || new Date().toISOString().split('T')[0]
+
+      const expenditures = await db.query(
+        `SELECT * FROM daily_expenditures WHERE user_id = $1 AND expenditure_date = $2 ORDER BY created_at DESC`,
+        [userId, date]
+      )
+
+      const totalResult = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM daily_expenditures WHERE user_id = $1 AND expenditure_date = $2`,
+        [userId, date]
+      )
+
+      res.json({
+        expenditures: expenditures.rows,
+        totalToday: parseFloat(totalResult.rows[0].total)
+      })
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
   async getSpendingAnalysis(req, res) {
     try {
       const userId = req.user.id

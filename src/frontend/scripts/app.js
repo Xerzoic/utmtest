@@ -243,6 +243,7 @@ async function loadDashboard() {
   connectSocket();
   updateNudgeBadge();
   if (state.currentTab === "dashboard") loadGamification();
+  loadTodayExpenses();
 }
 
 function renderStreakCalendar(streak) {
@@ -599,6 +600,66 @@ function timeAgo(dateStr) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return hrs + "h ago";
   return Math.floor(hrs / 24) + "d ago";
+}
+
+function getCategoryEmoji(category) {
+  const emojis = { food: "🍔", transport: "🚗", shopping: "🛍️", entertainment: "🎬", bills: "💡", health: "🏥", education: "📚", groceries: "🛒", other: "📌" };
+  return emojis[category] || "📌";
+}
+
+function openExpenseModal() {
+  document.getElementById("expenseModal").classList.add("open");
+  document.getElementById("expenseDate").value = new Date().toISOString().split("T")[0];
+  document.getElementById("expenseForm").reset();
+  document.getElementById("expenseDate").value = new Date().toISOString().split("T")[0];
+}
+
+async function submitExpense(e) {
+  e.preventDefault();
+  const amount = parseFloat(document.getElementById("expenseAmount").value);
+  const category = document.getElementById("expenseCategory").value;
+  const note = document.getElementById("expenseNote").value;
+  const expenditure_date = document.getElementById("expenseDate").value;
+
+  if (!amount || amount <= 0) { alert("Please enter a valid amount"); return; }
+  if (!category) { alert("Please select a category"); return; }
+
+  const data = await api("/expenditures", {
+    method: "POST",
+    body: JSON.stringify({ amount, category, note, expenditure_date }),
+  });
+
+  if (data) {
+    closeModal("expenseModal");
+    showNudgeToast({ title: "Expense Logged!", message: "RM " + amount.toFixed(2) + " recorded in " + category, priority: "normal" });
+    loadDashboard();
+    loadTodayExpenses();
+  } else {
+    alert("Failed to log expense. Please try again.");
+  }
+}
+
+async function loadTodayExpenses() {
+  const data = await api("/expenditures");
+  if (!data) return;
+
+  document.getElementById("todayExpenseTotal").textContent = "RM " + (data.totalToday || 0).toFixed(2);
+
+  const list = document.getElementById("todayExpensesList");
+  if (data.expenditures?.length > 0) {
+    list.innerHTML = data.expenditures.map(function(e) {
+      return "<div class='expense-item'>" +
+        "<span class='expense-icon'>" + getCategoryEmoji(e.category) + "</span>" +
+        "<div class='expense-details'>" +
+          "<p class='expense-category'>" + e.category + "</p>" +
+          "<p class='expense-note'>" + (e.note || "") + "</p>" +
+        "</div>" +
+        "<span class='expense-amount'>RM " + parseFloat(e.amount).toFixed(2) + "</span>" +
+      "</div>";
+    }).join("");
+  } else {
+    list.innerHTML = "<p class='empty-state'>No expenses logged today</p>";
+  }
 }
 
 function openNewGoalModal() { document.getElementById("newGoalModal").classList.add("open"); }

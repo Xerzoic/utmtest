@@ -743,3 +743,74 @@ body {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.05); }
 }
+
+/* === Daily Expenditure Feature === */
+
+.action-btn-highlight {
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+  border-color: var(--primary);
+  color: var(--bg);
+  animation: glow 2s ease-in-out infinite alternate;
+}
+.action-btn-highlight:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 212, 170, 0.3);
+}
+.action-btn-highlight .action-label { color: var(--bg); font-weight: 600; }
+
+@keyframes glow {
+  from { box-shadow: 0 0 5px rgba(0, 212, 170, 0.2); }
+  to { box-shadow: 0 0 15px rgba(0, 212, 170, 0.4); }
+}
+
+.expenses-section {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+}
+
+.expenses-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.expenses-total {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.expense-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.expense-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  transition: background 0.2s;
+}
+
+.expense-item:hover { background: var(--bg-card-hover); }
+
+.expense-icon { font-size: 20px; flex-shrink: 0; }
+
+.expense-details { flex: 1; min-width: 0; }
+.expense-category { font-size: 13px; font-weight: 600; }
+.expense-note { font-size: 11px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.expense-amount {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--danger);
+  white-space: nowrap;
+}
