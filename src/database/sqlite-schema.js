@@ -200,6 +200,30 @@ CREATE TABLE IF NOT EXISTS daily_expenditures (
 
 CREATE INDEX IF NOT EXISTS idx_daily_expenditures_user_date
   ON daily_expenditures(user_id, expenditure_date DESC);
+
+CREATE TABLE IF NOT EXISTS daily_quests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  quest_key TEXT NOT NULL,
+  quest_title TEXT NOT NULL,
+  quest_description TEXT NOT NULL,
+  xp_reward INTEGER NOT NULL,
+  target_value REAL,
+  current_value REAL DEFAULT 0,
+  is_completed INTEGER DEFAULT 0,
+  quest_date TEXT NOT NULL DEFAULT (date('now')),
+  completed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_quests_user_key_date ON daily_quests(user_id, quest_key, quest_date);
+
+CREATE TABLE IF NOT EXISTS group_messages (
+  id TEXT PRIMARY KEY,
+  group_id TEXT REFERENCES savings_groups(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  sent_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_group_messages ON group_messages(group_id, sent_at DESC);
 `
 
 module.exports = { SQL_SCHEMA: SQL_SCHEMA_PG }

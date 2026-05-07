@@ -79,7 +79,7 @@ cron.schedule('0 1 * * *', async () => {
 })
 
 server.listen(config.port, () => {
-  console.log(`GXSave server running on port ${config.port}`)
+  console.log(`GuGa Saves server running on port ${config.port}`)
   console.log(`Environment: ${config.nodeEnv}`)
   console.log(`API: http://localhost:${config.port}/api`)
 })

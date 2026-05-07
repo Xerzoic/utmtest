@@ -6,7 +6,7 @@ module.exports = {
   database: {
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
-    name: process.env.DB_NAME || 'gxsave_db',
+    name: process.env.DB_NAME || 'guga_saves_db',
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
   },
@@ -15,12 +15,12 @@ module.exports = {
     port: process.env.REDIS_PORT || 6379,
   },
   jwt: {
-    secret: process.env.JWT_SECRET || 'gxsave-dev-secret-change-in-production',
+    secret: process.env.JWT_SECRET || 'guga-dev-secret-change-in-production',
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
-  gxbank: {
-    apiUrl: process.env.GXBANK_API_URL || 'https://api.gxbank.com.my/v1',
-    apiKey: process.env.GXBANK_API_KEY || 'sandbox-api-key',
+  gugabank: {
+    apiUrl: process.env.GUGABANK_API_URL || 'https://api.gugabank.com.my/v1',
+    apiKey: process.env.GUGABANK_API_KEY || 'sandbox-api-key',
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY || 'sk-placeholder',

@@ -1,6 +1,6 @@
-# GXSave — Behavioural Finance Engine for GXBank
+# GuGa Saves — Behavioural Finance Engine for GuGa Bank
 
-A comprehensive solution that bridges the gap between financial awareness and consistent financial action for the next generation of Malaysian savers. Built as an enhancement layer on top of GXBank's existing digital banking platform.
+A comprehensive solution that bridges the gap between financial awareness and consistent financial action for the next generation of Malaysian savers. Built as an enhancement layer on top of GuGa Bank's existing digital banking platform.
 
 ## Problem Statement
 
@@ -14,10 +14,10 @@ Young Malaysian savers (ages 21-35) know they should save more, but struggle wit
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      GXSave Mobile App                       │
-│  (Dashboard, Goals, Nudges, Social, Auto-Save Management)    │
+│                      GuGa Saves Mobile App                   │
+│  (Dashboard, Calendar, Goals, Social, Quests, Insights)      │
 └──────────────────────┬──────────────────────────────────────┘
-                       │ REST API / WebSocket
+                        │ REST API / WebSocket
 ┌──────────────────────▼──────────────────────────────────────┐
 │                     API Gateway                              │
 └──┬────────────┬──────────────┬──────────────┬────────────────┘
@@ -29,11 +29,11 @@ Young Malaysian savers (ages 21-35) know they should save more, but struggle wit
    │            │              │              │
 ┌──▼────────────▼──────────────▼──────────────▼──────┐
 │                  Data Layer                         │
-│  PostgreSQL + Redis + TimescaleDB                   │
+│  SQLite (PostgreSQL-compatible queries)             │
 └──────────────────────┬─────────────────────────────┘
-                       │
+                        │
 ┌──────────────────────▼─────────────────────────────┐
-│              GXBank Core Integration                │
+│              GuGa Bank Core Integration             │
 │   Account APIs, Transaction Feeds, Transfer APIs    │
 └─────────────────────────────────────────────────────┘
 ```
@@ -87,7 +87,7 @@ Reduces reliance on discipline through automated mechanisms:
 | Rule Type | Mechanism | Malaysian Context |
 |---|---|---|
 | **Round-Up** | Round every purchase to nearest RM1 | Works with DuitNow QR transactions |
-| **Salary Trigger** | Auto-save % when salary is detected | Tied to B2B salary crediting via GXBank |
+| **Salary Trigger** | Auto-save % when salary is detected | Tied to B2B salary crediting via GuGa Bank |
 | **Fixed Schedule** | Weekly/monthly auto-transfer | Flexible for gig workers with irregular income |
 | **Spending Threshold** | Save when underspending budget | Rewards frugal behaviour |
 
@@ -105,6 +105,8 @@ Encourages long-term habit formation:
 - 25 XP per streak day (capped at 7 days/week)
 - 100 XP per savings milestone
 - 200 XP per goal completion
+- 50 XP per goal creation
+- 30-50 XP per daily quest completed
 - 10 levels with increasing thresholds
 
 **Badge System (14 badges):**
@@ -114,31 +116,60 @@ Encourages long-term habit formation:
 | Week Warrior | 7-day streak |
 | Habit Master | 21-day streak |
 | Monthly Champion | 30-day streak |
+| First K Plus | RM500 saved |
 | Grand RM1K | RM1,000 saved |
+| Five Grand | RM5,000 saved |
 | Ten K Club | RM10,000 saved |
 | Goal Crusher | First goal completed |
 | Team Player | Joined savings group |
-| Budget Master | Under all budgets for a month |
+| Man of Word | Kept a group commitment |
 | Penny Saver | RM100 saved via round-ups |
+| Paycheck Pro | Salary trigger used for 3 months |
+| Budget Master | Under all budgets for a month |
+| Zero Hero | Completed a zero-spend day |
 
-**Social Accountability:**
-- Savings groups (max 10 members)
-- Public commitments ("I'll save RM500 by June")
-- Group leaderboards with rank badges
-- Collective group goals
+**Sound Effects (Web Audio API):**
+- Badge earned: descending chime
+- XP gain: quick ascending blip
+- Level up: ascending arpeggio
+- Quest complete: bright staccato
 
-## GXBank Integration Points
+### 5. Spending Calendar
 
-### Current GXBank Features Enhanced
+Visual calendar view showing daily spending colour-coded against budget:
+- 🟢 Green: spending ≤ daily budget
+- 🟡 Yellow: spending 50-100% of budget
+- 🔴 Red: spending > budget
 
-| Existing Feature | GXSave Enhancement |
+Click a day to see detailed breakdown of expenditures, transactions, and savings.
+
+### 6. Social System (Clash Royale Inspired)
+
+Full social features with groups, chat, and gamification:
+
+**Daily Quests:**
+- Log an Expense (1 entry) — 30 XP
+- Save RM5 Today — 50 XP
+- Stay Under RM50 Spending — 40 XP
+
+**Group Features:**
+- Discover and join savings clans
+- Group chat with real-time messaging
+- Member list with level badges
+- Leaderboard with gold/silver/bronze tier medals
+
+## GuGa Bank Integration Points
+
+### Current GuGa Bank Features Enhanced
+
+| Existing Feature | GuGa Saves Enhancement |
 |---|---|
 | **Transaction Feed** | AI categorisation + real-time spending alerts |
 | **Savings Pots** | Behavioural nudges + auto-save rules + streak tracking |
 | **Push Notifications** | Context-aware nudges at teachable moments |
 | **Basic Budgets** | AI-powered recommendations + anomaly detection |
 
-### Proposed New GXBank Features
+### Proposed New GuGa Bank Features
 
 | New Feature | Description |
 |---|---|
@@ -160,8 +191,6 @@ Encourages long-term habit formation:
 
 ### Prerequisites
 - Node.js 18+
-- PostgreSQL 14+
-- Redis 7+ (optional for caching)
 
 ### Setup
 
@@ -176,33 +205,59 @@ cp .env.example .env
 # Run database migrations
 npm run migrate
 
-# Seed demo data
+# Seed demo data (includes 3 users, 5 dummy groups, transactions, budgets)
 npm run seed
 
 # Start the server
 npm run dev
 ```
 
+Demo user: aisha.rahman@email.com (Login without password)
+
 ### API Endpoints
 
 ```
-GET    /api/dashboard              - Full dashboard overview
-GET    /api/insights               - AI-generated financial insights
-GET    /api/goals                  - List savings goals
-POST   /api/goals                  - Create new goal
-GET    /api/transactions           - List transactions
-POST   /api/transactions           - Add transaction (triggers round-up)
-GET    /api/autosave/rules         - List auto-save rules
-POST   /api/autosave/rules         - Create auto-save rule
-PATCH  /api/autosave/rules/:id     - Toggle rule
-GET    /api/nudges                 - List notifications
-PATCH  /api/nudges/:id/read        - Mark as read
-GET    /api/gamification           - User gamification profile
-POST   /api/groups                 - Create savings group
-POST   /api/groups/:id/join        - Join group
-POST   /api/groups/:id/commitments - Make commitment
-GET    /api/groups/:id/leaderboard - View leaderboard
-GET    /api/analytics/spending     - Spending analysis
+GET    /api/dashboard                - Full dashboard overview
+GET    /api/insights                 - AI-generated financial insights
+GET    /api/goals                    - List savings goals
+POST   /api/goals                    - Create new goal
+DELETE /api/goals/:id                - Delete goal
+
+GET    /api/transactions             - List transactions
+POST   /api/transactions             - Add transaction (triggers round-up)
+POST   /api/expenditures             - Log daily expense
+GET    /api/expenditures             - Get daily expenditures
+
+GET    /api/autosave/rules           - List auto-save rules
+POST   /api/autosave/rules           - Create auto-save rule
+PATCH  /api/autosave/rules/:id       - Toggle rule
+DELETE /api/autosave/rules/:id       - Delete rule
+
+GET    /api/roundup/status           - Round-up status & totals
+POST   /api/roundup/toggle           - Enable/disable round-up
+
+GET    /api/nudges                   - List notifications
+PATCH  /api/nudges/:id/read          - Mark as read
+PATCH  /api/nudges/mark-all-read     - Mark all as read
+
+GET    /api/gamification             - User gamification profile
+
+GET    /api/groups                   - List all groups (with is_member flag)
+POST   /api/groups                   - Create savings group
+POST   /api/groups/:id/join          - Join group
+POST   /api/groups/:id/commitments   - Make commitment
+GET    /api/groups/:id/leaderboard   - View leaderboard
+GET    /api/groups/:id/messages      - Get group chat messages
+POST   /api/groups/:id/messages      - Send group message
+GET    /api/groups/:id/members       - Get group member list
+
+GET    /api/quests                   - Get today's daily quests
+POST   /api/quests/:key/complete     - Complete a quest
+
+GET    /api/advice                   - Personalised financial advice
+GET    /api/analytics/spending       - Spending analysis
+GET    /api/calendar?month=YYYY-MM   - Calendar spending data
+GET    /api/calendar/day?date=YYYY-MM-DD - Day detail
 ```
 
 ### Running Tests
@@ -217,15 +272,15 @@ npm test
 src/
 ├── config/              - Application configuration
 ├── database/
-│   ├── schema.js        - Full SQL schema (15 tables)
-│   ├── connection.js    - PostgreSQL connection pool
+│   ├── sqlite-schema.js - Full SQL schema (17 tables)
+│   ├── connection.js    - SQLite connection with PostgreSQL syntax conversion
 │   ├── migrate.js       - Migration runner
 │   └── seed.js          - Demo data seeder
 ├── services/
 │   ├── NudgeEngine.js   - Behavioural nudge system
 │   ├── AIEngine.js      - Spending analysis & insights
 │   ├── AutoSaveEngine.js - Round-up & salary-triggered savings
-│   └── GamificationEngine.js - XP, badges, groups
+│   └── GamificationEngine.js - XP, badges, groups, quests, chat
 ├── controllers/
 │   └── dashboardController.js - API route handlers
 ├── routes/
@@ -233,9 +288,9 @@ src/
 ├── middleware/
 │   └── auth.js          - JWT authentication
 ├── frontend/
-│   ├── index.html       - Mobile-first SPA dashboard
-│   ├── styles/main.css  - Complete CSS (dark theme)
-│   └── scripts/app.js   - Client-side JavaScript
+│   ├── index.html       - Mobile-first SPA dashboard (all features)
+│   ├── styles/main.css  - Complete CSS (dark theme, 950+ lines)
+│   └── scripts/app.js   - Client-side JavaScript (all features)
 └── server.js            - Express + WebSocket + Cron server
 
 tests/
@@ -245,12 +300,14 @@ tests/
 ## Key Design Decisions
 
 1. **Mobile-first interface**: Malaysian Gen Z/Millennials are mobile-native; the UI is optimised for 480px width
-2. **Dark theme**: Matches GXBank's existing brand aesthetic
+2. **Dark theme**: Matches GuGa Bank's existing brand aesthetic
 3. **Malaysian Ringgit (RM) throughout**: Localised for the target market
 4. **Malaysian merchant categorisation**: Recognises GrabFood, Shopee, TGV, TNB, etc.
 5. **BNM-compliant**: All automation is opt-in with user control
 6. **Real-time nudges**: WebSocket delivery for immediate behavioural intervention
 7. **Cron-based scheduling**: Weekly recaps, monthly analysis, daily salary checks
+8. **SQLite with PostgreSQL syntax**: Uses $1,$2 parameterised queries auto-converted by connection layer
+9. **Web Audio API sounds**: Synthesised sound effects for gamification (no external audio files)
 
 ## Future Enhancements
 

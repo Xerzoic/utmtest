@@ -3,18 +3,18 @@ const db = require('./connection')
 const TEST_USERS = [
   {
     id: 'test-user-0001',
-    gxbank_account_id: 'GX-TEST-001',
+    gxbank_account_id: 'GG-TEST-001',
     full_name: 'Test User One',
-    email: 'test1@gxsave.test',
+    email: 'test1@guga.test',
     phone: '+60199999001',
     monthly_income: 5000,
     risk_profile: 'moderate',
   },
   {
     id: 'test-user-0002',
-    gxbank_account_id: 'GX-TEST-002',
+    gxbank_account_id: 'GG-TEST-002',
     full_name: 'Test User Two',
-    email: 'test2@gxsave.test',
+    email: 'test2@guga.test',
     phone: '+60199999002',
     monthly_income: 3000,
     risk_profile: 'conservative',

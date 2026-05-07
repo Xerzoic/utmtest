@@ -9,7 +9,7 @@ const state = {
 };
 
 function init() {
-  const savedToken = localStorage.getItem("gxsave_token");
+  const savedToken = localStorage.getItem("guga_token");
   if (savedToken) {
     state.token = savedToken;
     loadDashboard();
@@ -88,7 +88,7 @@ async function login() {
     if (data.token) {
       state.token = data.token;
       state.user = data.user;
-      localStorage.setItem("gxsave_token", data.token);
+      localStorage.setItem("guga_token", data.token);
       const initials = (data.user.full_name || "?").substring(0, 2).toUpperCase();
       document.getElementById("userAvatar").textContent = initials;
       showMainApp();
@@ -115,14 +115,14 @@ async function register() {
         email,
         phone: phone || "+60100000000",
         monthly_income: parseInt(income) || 5000,
-        gxbank_account_id: "GX-" + Date.now(),
+        gxbank_account_id: "GG-" + Date.now(),
       }),
     });
     const data = await res.json();
     if (data.token) {
       state.token = data.token;
       state.user = data.user;
-      localStorage.setItem("gxsave_token", data.token);
+      localStorage.setItem("guga_token", data.token);
       const initials = (data.user.full_name || "?").substring(0, 2).toUpperCase();
       document.getElementById("userAvatar").textContent = initials;
       showMainApp();
@@ -141,13 +141,13 @@ async function demoLogin() {
     if (data.token) {
       state.token = data.token;
       state.user = data.user;
-      localStorage.setItem("gxsave_token", data.token);
+      localStorage.setItem("guga_token", data.token);
       const initials = (data.user.full_name || "?").substring(0, 2).toUpperCase();
       document.getElementById("userAvatar").textContent = initials;
       showMainApp();
     }
   } catch (err) {
-    alert("Demo login failed. Make sure server is running on localhost:3000");
+    alert("Demo login failed. Make sure server is running");
   }
 }
 
@@ -244,6 +244,9 @@ async function loadDashboard() {
   updateNudgeBadge();
   if (state.currentTab === "dashboard") loadGamification();
   loadTodayExpenses();
+  var now = new Date();
+  loadCalendar(now.getFullYear(), now.getMonth() + 1);
+  checkStreakAnimation(data.streak);
 }
 
 function renderStreakCalendar(streak) {
@@ -339,8 +342,15 @@ function renderGoals(goals) {
         "<p class='goal-amounts'>RM " + (g.current_amount || 0).toLocaleString() + " <span class='goal-target'>/ RM " + (g.target_amount || 0).toLocaleString() + "</span></p>" +
         deadlineStr +
       "</div>" +
+      "<button class='delete-btn' onclick='deleteGoal(\"" + g.id + "\")' title='Delete goal'>🗑️</button>" +
     "</div>";
   }).join("");
+}
+
+async function deleteGoal(goalId) {
+  if (!confirm("Delete this goal?")) return;
+  await api("/goals/" + goalId, { method: "DELETE" });
+  loadGoals();
 }
 
 function getCategoryIcon(category) {
@@ -368,7 +378,6 @@ async function createGoal(e) {
 }
 
 async function loadInsights() {
-  showTab("insights");
   const data = await api("/insights");
   if (!data) return;
 
@@ -406,6 +415,40 @@ async function loadInsights() {
   content.innerHTML = html;
 }
 
+async function refreshInsights() {
+  const data = await api("/insights");
+  if (!data) return;
+  const content = document.getElementById("insightsContent");
+  let html = "<div class='insight-card insight-summary'>" +
+    "<h3>Financial Health: " + (data.financialHealth || "Good") + "</h3>" +
+    "<div class='health-score'>" +
+      "<div class='score-circle'>" +
+        "<span class='score-value'>" + (data.savingsRate || 0) + "%</span>" +
+        "<span class='score-label'>Savings Rate</span>" +
+      "</div>" +
+    "</div>" +
+    "<p class='insight-text'>" + (data.summary || "") + "</p>" +
+  "</div>";
+  if (data.tips?.length > 0) {
+    html += "<div class='insight-card insight-tips'><h3>Personalised Tips</h3><div class='tip-list'>";
+    html += data.tips.map(function(t) {
+      return "<div class='tip-item tip-" + (t.priority || "medium") + "'>" +
+        "<span class='tip-priority'>" + (t.priority || "medium").toUpperCase() + "</span>" +
+        "<p class='tip-text'><strong>" + t.title + "</strong> - " + t.message + "</p>" +
+      "</div>";
+    }).join("");
+    html += "</div></div>";
+  }
+  if (data.risks?.length > 0) {
+    html += "<div class='insight-card insight-risks'><h3>Areas to Watch</h3>";
+    html += data.risks.map(function(r) {
+      return "<div class='risk-item'><span class='risk-icon'>!</span><p class='risk-text'>" + r.message + "</p></div>";
+    }).join("");
+    html += "</div>";
+  }
+  content.innerHTML = html;
+}
+
 async function loadRules() {
   const data = await api("/autosave/rules");
   if (data) renderRules(data);
@@ -424,6 +467,7 @@ function renderRules(rules) {
           "<h3 class='rule-name'>" + typeDisplay + "</h3>" +
           "<p class='rule-desc'>" + JSON.stringify(r.config) + "</p>" +
         "</div>" +
+        "<button class='delete-btn' onclick='deleteRule(\"" + r.id + "\")' title='Delete rule'>🗑️</button>" +
         "<label class='toggle-switch'>" +
           "<input type='checkbox' " + (r.is_active ? "checked" : "") + " onchange='toggleRule(\"" + r.id + "\", this.checked)'>" +
           "<span class='toggle-slider'></span>" +
@@ -437,6 +481,12 @@ function renderRules(rules) {
       "</div>" +
     "</div>";
   }).join("");
+}
+
+async function deleteRule(ruleId) {
+  if (!confirm("Delete this rule?")) return;
+  await api("/autosave/rules/" + ruleId, { method: "DELETE" });
+  loadRules();
 }
 
 async function createRule(e) {
@@ -548,7 +598,7 @@ function showTab(tabName) {
 
   if (tabName === "goals") loadGoals();
   if (tabName === "autosave") loadRules();
-  if (tabName === "social") loadGroups();
+  if (tabName === "social") loadSocialTab();
   if (tabName === "insights") loadInsights();
 }
 
@@ -589,6 +639,58 @@ function updateNudgeBadge() {
 async function markRead(nudgeId) {
   await api("/nudges/" + nudgeId + "/read", { method: "PATCH" });
   loadNudges();
+}
+
+function checkStreakAnimation(streak) {
+  var count = streak?.current_streak || 0;
+  if (count <= 0) return;
+  var today = new Date().toISOString().split("T")[0];
+  var lastShown = localStorage.getItem("guga_last_streak_shown");
+  if (lastShown === today) return;
+  localStorage.setItem("guga_last_streak_shown", today);
+  showStreakOverlay(count);
+}
+
+function showStreakOverlay(count) {
+  var msg = "Keep it up!";
+  if (count >= 30) msg = "Unstoppable!";
+  else if (count >= 21) msg = "Habit formed!";
+  else if (count >= 7) msg = "One week strong!";
+  else if (count >= 1) msg = "Your journey begins!";
+  document.getElementById("streakAnimCount").textContent = count;
+  document.getElementById("streakAnimMsg").textContent = msg;
+  document.getElementById("streakOverlay").classList.add("open");
+  var container = document.getElementById("streakConfetti");
+  container.innerHTML = "";
+  var colors = ["#ef4444","#f59e0b","#10b981","#3b82f6","#a855f7","#ec4899"];
+  for (var i = 0; i < 30; i++) {
+    var p = document.createElement("div");
+    p.className = "confetti-particle";
+    p.style.left = Math.random() * 100 + "%";
+    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+    p.style.animationDelay = Math.random() * 1.5 + "s";
+    p.style.animationDuration = 2 + Math.random() * 1 + "s";
+    container.appendChild(p);
+  }
+  var el = document.getElementById("streakAnimCount");
+  var current = 0;
+  var interval = setInterval(function() {
+    current++;
+    el.textContent = current;
+    if (current >= count) clearInterval(interval);
+  }, Math.max(20, 1000 / count));
+}
+
+function dismissStreakOverlay() {
+  document.getElementById("streakOverlay").classList.remove("open");
+  document.getElementById("streakConfetti").innerHTML = "";
+}
+
+async function markAllRead() {
+  await api("/nudges/mark-all-read", { method: "PATCH" });
+  loadNudges();
+  updateNudgeBadge();
+  showNudgeToast({ title: "All Clear!", message: "All notifications marked as read", priority: "normal" });
 }
 
 function timeAgo(dateStr) {
@@ -634,6 +736,9 @@ async function submitExpense(e) {
     showNudgeToast({ title: "Expense Logged!", message: "RM " + amount.toFixed(2) + " recorded in " + category, priority: "normal" });
     loadDashboard();
     loadTodayExpenses();
+    if (document.getElementById("roundUpPanel")?.classList.contains("open")) {
+      loadRoundUpStatus();
+    }
   } else {
     alert("Failed to log expense. Please try again.");
   }
@@ -666,5 +771,507 @@ function openNewGoalModal() { document.getElementById("newGoalModal").classList.
 function openNewRuleModal() { document.getElementById("newRuleModal").classList.add("open"); }
 function openNewGroupModal() { document.getElementById("newGroupModal").classList.add("open"); }
 function closeModal(modalId) { document.getElementById(modalId).classList.remove("open"); }
+
+var roundUpDemoInterval = null;
+var stateAdviceData = null;
+
+function openAdvisor() {
+  document.getElementById("advisorOverlay").classList.add("open");
+  loadAdvice();
+}
+
+function closeAdvisor() {
+  document.getElementById("advisorOverlay").classList.remove("open");
+}
+
+async function loadAdvice() {
+  var data = await api("/advice");
+  if (!data) return;
+  stateAdviceData = data;
+  renderAdviceTab("daily");
+}
+
+function switchAdvisorTab(period) {
+  document.querySelectorAll(".advisor-tab").forEach(function(t) { t.classList.remove("active"); });
+  document.getElementById("advTab" + period.charAt(0).toUpperCase() + period.slice(1)).classList.add("active");
+  renderAdviceTab(period);
+}
+
+function renderAdviceTab(period) {
+  var d = stateAdviceData;
+  if (!d) return;
+  var data = d[period];
+  if (!data) return;
+  var tip = data.tip || {};
+  var tipPriority = tip.priority === "high" ? "danger" : tip.priority === "medium" ? "warning" : "success";
+  var tipBorder = tip.priority === "high" ? "var(--danger)" : tip.priority === "medium" ? "var(--warning)" : "var(--success)";
+  var content = document.getElementById("advisorContent");
+
+  var html = '<div class="advisor-stat-card">' +
+    '<p class="advisor-stat-label">Total Spent (' + period + ')</p>' +
+    '<p class="advisor-stat-value">RM ' + (data.spent || 0).toFixed(2) + '</p>' +
+  '</div>';
+
+  if (period === "monthly" && d.monthly) {
+    var rate = parseFloat(d.monthly.savingsRate) || 0;
+    var gaugeColor = rate >= 20 ? "#10b981" : rate >= 10 ? "#f59e0b" : "#ef4444";
+    html += '<div class="advisor-ring">' +
+      '<div class="advisor-ring-circle" style="background: conic-gradient(' + gaugeColor + ' ' + rate + '%, var(--bg) ' + rate + '%);">' +
+        '<span class="advisor-ring-value">' + rate + '%</span>' +
+        '<span class="advisor-ring-label">Savings Rate</span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  if (period === "annual" && d.annual && d.annual.projected) {
+    html += '<div class="advisor-stat-card">' +
+      '<p class="advisor-stat-label">Projected Annual Spend</p>' +
+      '<p class="advisor-stat-value">RM ' + d.annual.projected.toFixed(2) + '</p>' +
+    '</div>';
+  }
+
+  if (data.categories && data.categories.length > 0) {
+    html += '<div class="advisor-categories"><h3>Category Breakdown</h3>';
+    var vals = data.categories.map(function(c) { return parseFloat(c.total); });
+    var max = Math.max.apply(null, vals) || 1;
+    var colors = { food: "#ef4444", transport: "#3b82f6", shopping: "#a855f7", entertainment: "#f59e0b", bills: "#10b981", other: "#6b7280" };
+    data.categories.forEach(function(c) {
+      var pct = (parseFloat(c.total) / max * 100).toFixed(0);
+      var color = colors[c.category] || colors.other;
+      html += '<div class="chart-bar">' +
+        '<span class="chart-label">' + c.category + '</span>' +
+        '<div class="chart-track"><div class="chart-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+        '<span class="chart-amount">RM' + parseFloat(c.total).toFixed(0) + '</span>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+
+  if (tip && tip.title) {
+    html += '<div class="advisor-tip-card" style="border-left-color: ' + tipBorder + '">' +
+      '<span class="advisor-tip-priority advisor-tip-' + tipPriority + '">' + (tip.priority || "info").toUpperCase() + '</span>' +
+      '<p class="advisor-tip-title">' + tip.title + '</p>' +
+      '<p class="advisor-tip-text">' + (tip.message || "") + '</p>' +
+    '</div>';
+  }
+
+  html += '<div class="advisor-meta">' +
+    '<p>🔥 ' + (d.streak?.current_streak || 0) + ' day streak</p>' +
+    '<p>🎯 ' + (d.goalCount || 0) + ' active goals</p>' +
+  '</div>';
+
+  content.innerHTML = html;
+}
+
+var roundUpDemoInterval = null;
+
+function openRoundUpPanel() {
+  document.getElementById("roundUpPanel").classList.add("open");
+  loadRoundUpStatus();
+  animateRoundUpDemo();
+}
+
+function closeRoundUpPanel() {
+  document.getElementById("roundUpPanel").classList.remove("open");
+  if (roundUpDemoInterval) { clearInterval(roundUpDemoInterval); roundUpDemoInterval = null; }
+}
+
+async function loadRoundUpStatus() {
+  var data = await api("/roundup/status");
+  if (!data) return;
+  document.getElementById("roundUpToggle").checked = data.enabled;
+  document.getElementById("roundUpTotal").textContent = "RM " + (data.totalSaved || 0).toFixed(2);
+  document.getElementById("roundUpCount").textContent = data.transactionCount || 0;
+}
+
+async function handleRoundUpToggle(enabled) {
+  var data = await api("/roundup/toggle", { method: "POST", body: JSON.stringify({ enabled }) });
+  if (data) {
+    showNudgeToast({
+      title: enabled ? "Round-Up Activated!" : "Round-Up Disabled",
+      message: enabled ? "Your purchases will now round up to the nearest RM" : "Round-up savings turned off",
+      priority: "normal",
+    });
+    loadRoundUpStatus();
+  } else {
+    document.getElementById("roundUpToggle").checked = !enabled;
+  }
+}
+
+function animateRoundUpDemo() {
+  var examples = [
+    { spend: "RM 4.70", rounded: "RM 5.00", saved: "RM 0.30" },
+    { spend: "RM 12.30", rounded: "RM 13.00", saved: "RM 0.70" },
+    { spend: "RM 8.50", rounded: "RM 9.00", saved: "RM 0.50" },
+  ];
+  var idx = 0;
+  var spendEl = document.getElementById("roundUpSpend");
+  var roundedEl = document.getElementById("roundUpRounded");
+  var savedEl = document.querySelector(".roundup-example-saved");
+  var trail = document.getElementById("coinTrail");
+  function showExample() {
+    var ex = examples[idx];
+    spendEl.textContent = ex.spend;
+    roundedEl.textContent = ex.rounded;
+    savedEl.textContent = ex.saved + " → Savings 🐷";
+    for (var i = 0; i < 5; i++) {
+      var coin = document.createElement("div");
+      coin.className = "roundup-coin";
+      coin.textContent = "🪙";
+      coin.style.left = (20 + Math.random() * 60) + "%";
+      coin.style.animationDelay = (i * 0.15) + "s";
+      trail.appendChild(coin);
+      setTimeout(function(c) { c.remove(); }, 1500, coin);
+    }
+    idx = (idx + 1) % examples.length;
+  }
+  showExample();
+  roundUpDemoInterval = setInterval(showExample, 3000);
+}
+
+var audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playSound(type) {
+  try {
+    var ctx = getAudioCtx();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.value = 0.15;
+    if (type === "badge") {
+      osc.frequency.setValueAtTime(523, ctx.currentTime);
+      osc.frequency.setValueAtTime(659, ctx.currentTime + 0.15);
+      osc.frequency.setValueAtTime(784, ctx.currentTime + 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.6);
+    } else if (type === "xp") {
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.setValueAtTime(554, ctx.currentTime + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.25);
+    } else if (type === "levelup") {
+      osc.frequency.setValueAtTime(262, ctx.currentTime);
+      osc.frequency.setValueAtTime(330, ctx.currentTime + 0.15);
+      osc.frequency.setValueAtTime(392, ctx.currentTime + 0.3);
+      osc.frequency.setValueAtTime(523, ctx.currentTime + 0.45);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.8);
+    } else if (type === "quest") {
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1108, ctx.currentTime + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    }
+  } catch (e) { /* Audio not supported */ }
+}
+
+function showBadgeEarnedOverlay(badge) {
+  document.getElementById("badgeEarnedIcon").textContent = getBadgeIcon(badge.badge_icon || "badge");
+  document.getElementById("badgeEarnedName").textContent = badge.badge_name;
+  document.getElementById("badgeEarnedDesc").textContent = badge.badge_description || "";
+  document.getElementById("badgeOverlay").classList.add("open");
+  playSound("badge");
+  var container = document.getElementById("badgeParticles");
+  container.innerHTML = "";
+  var colors = ["#00d4aa","#10b981","#f59e0b","#a855f7","#3b82f6","#ef4444"];
+  for (var i = 0; i < 20; i++) {
+    var p = document.createElement("div");
+    p.className = "confetti-particle";
+    p.style.left = Math.random() * 100 + "%";
+    p.style.top = Math.random() * 100 + "%";
+    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+    p.style.animationDelay = Math.random() * 0.5 + "s";
+    p.style.animationDuration = 1.5 + Math.random() * 1 + "s";
+    container.appendChild(p);
+  }
+  setTimeout(dismissBadgeOverlay, 3000);
+}
+
+function dismissBadgeOverlay() {
+  document.getElementById("badgeOverlay").classList.remove("open");
+}
+
+var activeGroupId = null;
+
+async function loadSocialTab() {
+  var [quests, groups] = await Promise.all([
+    api("/quests"),
+    api("/groups"),
+  ]);
+  if (quests) renderQuests(quests);
+  if (groups) renderGroups(groups);
+}
+
+function renderQuests(quests) {
+  var list = document.getElementById("questsList");
+  if (!Array.isArray(quests) || quests.length === 0) {
+    list.innerHTML = "<p class='empty-state'>No quests today</p>";
+    return;
+  }
+  list.innerHTML = quests.map(function(q) {
+    var pct = q.target_value > 0 ? Math.min((q.current_value / q.target_value) * 100, 100) : 0;
+    var done = q.is_completed ? " quest-done" : "";
+    return "<div class='quest-card" + done + "'>" +
+      "<div class='quest-header'>" +
+        "<div class='quest-info'>" +
+          "<h3 class='quest-title'>" + q.quest_title + "</h3>" +
+          "<p class='quest-desc'>" + q.quest_description + "</p>" +
+        "</div>" +
+        "<span class='quest-xp'>+" + q.xp_reward + " XP</span>" +
+      "</div>" +
+      (q.is_completed
+        ? "<div class='quest-complete-badge'>✅ Completed!</div>"
+        : "<div class='quest-bar'><div class='quest-fill' style='width:" + pct + "%'></div></div>" +
+          "<p class='quest-progress-text'>" + (q.current_value || 0) + " / " + q.target_value + "</p>") +
+    "</div>";
+  }).join("");
+}
+
+function renderGroups(groups) {
+  if (!Array.isArray(groups)) return;
+  var myGroups = groups.filter(function(g) { return g.is_member; });
+  var discoverGroups = groups.filter(function(g) { return !g.is_member; });
+  document.getElementById("myGroupsList").innerHTML = myGroups.length > 0
+    ? myGroups.map(function(g) { return groupCard(g, true); }).join("")
+    : "<p class='empty-state'>You haven't joined any clans yet</p>";
+  document.getElementById("discoverGroupsList").innerHTML = discoverGroups.length > 0
+    ? discoverGroups.map(function(g) { return groupCard(g, false); }).join("")
+    : "<p class='empty-state'>No clans to discover</p>";
+}
+
+function groupCard(g, isMember) {
+  return "<div class='group-card'>" +
+    "<div class='group-card-header'>" +
+      "<span class='group-icon'>🛡️</span>" +
+      "<div class='group-card-info'>" +
+        "<h3>" + g.name + "</h3>" +
+        "<p class='group-meta'>" + (g.member_count || 0) + " members" + (g.goal_type ? " • " + g.goal_type : "") + "</p>" +
+      "</div>" +
+    "</div>" +
+    "<p class='group-desc'>" + (g.description || "") + "</p>" +
+    "<div class='group-card-actions'>" +
+      (isMember
+        ? "<button class='btn-secondary' onclick='openGroupDetail(\"" + g.id + "\")'>Open</button>"
+        : "<button class='btn-primary' onclick='joinGroup(\"" + g.id + "\")'>Join</button>") +
+    "</div>" +
+  "</div>";
+}
+
+async function joinGroup(groupId) {
+  var data = await api("/groups/" + groupId + "/join", { method: "POST" });
+  if (data) {
+    showNudgeToast({ title: "Joined Clan!", message: "You're now a member", priority: "normal" });
+    loadSocialTab();
+  }
+}
+
+async function openGroupDetail(groupId) {
+  activeGroupId = groupId;
+  document.getElementById("groupDetailOverlay").classList.add("open");
+  var group = (await api("/groups")).find(function(g) { return g.id === groupId; });
+  document.getElementById("groupDetailName").textContent = group ? group.name : "Group";
+  switchGroupTab("chat");
+}
+
+function closeGroupDetail() {
+  document.getElementById("groupDetailOverlay").classList.remove("open");
+  activeGroupId = null;
+}
+
+function switchGroupTab(tab) {
+  document.querySelectorAll(".gd-tab").forEach(function(t) { t.classList.remove("active"); });
+  var tabs = { chat: 0, members: 1, leaderboard: 2 };
+  var btns = document.querySelectorAll(".gd-tab");
+  if (btns[tabs[tab]]) btns[tabs[tab]].classList.add("active");
+  document.getElementById("chatInputBar").style.display = tab === "chat" ? "flex" : "none";
+  var content = document.getElementById("groupDetailContent");
+  if (tab === "chat") {
+    content.innerHTML = "<p class='empty-state'>Loading chat...</p>";
+    api("/groups/" + activeGroupId + "/messages").then(function(data) {
+      renderChat(data || []);
+    });
+  } else if (tab === "members") {
+    content.innerHTML = "<p class='empty-state'>Loading members...</p>";
+    api("/groups/" + activeGroupId + "/members").then(function(data) {
+      renderMembers(data || []);
+    });
+  } else if (tab === "leaderboard") {
+    content.innerHTML = "<p class='empty-state'>Loading leaderboard...</p>";
+    api("/groups/" + activeGroupId + "/leaderboard").then(function(data) {
+      renderGroupLeaderboard(data || []);
+    });
+  }
+}
+
+function renderChat(messages) {
+  var content = document.getElementById("groupDetailContent");
+  if (messages.length === 0) {
+    content.innerHTML = "<div class='chat-messages'><p class='empty-state'>No messages yet. Say hello!</p></div>";
+    return;
+  }
+  var userId = state.user?.id;
+  var html = "<div class='chat-messages'>";
+  messages.forEach(function(m) {
+    var isOwn = m.user_id === userId;
+    html += "<div class='chat-msg" + (isOwn ? " chat-msg-own" : "") + "'>" +
+      (!isOwn ? "<span class='chat-msg-author'>" + (m.full_name || "Unknown") + "</span>" : "") +
+      "<div class='chat-msg-bubble'>" + m.message + "</div>" +
+      "<span class='chat-msg-time'>" + timeAgo(m.sent_at) + "</span>" +
+    "</div>";
+  });
+  html += "</div>";
+  content.innerHTML = html;
+  content.scrollTop = content.scrollHeight;
+}
+
+async function sendMessage() {
+  var input = document.getElementById("chatInput");
+  var msg = input.value.trim();
+  if (!msg || !activeGroupId) return;
+  input.value = "";
+  await api("/groups/" + activeGroupId + "/messages", {
+    method: "POST",
+    body: JSON.stringify({ message: msg }),
+  });
+  switchGroupTab("chat");
+}
+
+function renderMembers(members) {
+  var content = document.getElementById("groupDetailContent");
+  if (members.length === 0) {
+    content.innerHTML = "<p class='empty-state'>No members</p>";
+    return;
+  }
+  var html = "<div class='members-list'>";
+  members.forEach(function(m) {
+    html += "<div class='member-item'>" +
+      "<div class='member-avatar'>" + (m.full_name || "?").substring(0, 2).toUpperCase() + "</div>" +
+      "<div class='member-info'>" +
+        "<p class='member-name'>" + m.full_name + "</p>" +
+        "<p class='member-stats'>Level " + (m.level || 1) + " • " + (m.streak || 0) + " day streak</p>" +
+      "</div>" +
+      "<span class='member-level-badge'>Lv" + (m.level || 1) + "</span>" +
+    "</div>";
+  });
+  html += "</div>";
+  content.innerHTML = html;
+}
+
+function renderGroupLeaderboard(data) {
+  var content = document.getElementById("groupDetailContent");
+  if (data.length === 0) {
+    content.innerHTML = "<p class='empty-state'>No leaderboard data</p>";
+    return;
+  }
+  var medals = ["🥇", "🥈", "🥉"];
+  var html = "<div class='leaderboard-list'>";
+  data.forEach(function(m, i) {
+    var rank = i + 1;
+    var medal = i < 3 ? "<span class='rank-medal'>" + medals[i] + "</span>" : "<span class='rank-num'>" + rank + "</span>";
+    html += "<div class='leaderboard-item rank-" + rank + "'>" +
+      medal +
+      "<span class='lb-name'>" + m.full_name + "</span>" +
+      "<span class='lb-saved'>RM " + parseFloat(m.total_saved || 0).toFixed(2) + "</span>" +
+    "</div>";
+  });
+  html += "</div>";
+  content.innerHTML = html;
+}
+
+var calendarDate = new Date();
+
+function loadCalendar(year, month) {
+  var m = (month < 10 ? "0" : "") + month;
+  api("/calendar?month=" + year + "-" + m).then(function(data) {
+    if (!data) return;
+    var grid = document.getElementById("calendarGrid");
+    var monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    document.getElementById("calendarMonth").textContent = monthNames[month - 1] + " " + year;
+    var daysMap = {};
+    if (data.days) {
+      data.days.forEach(function(d) { daysMap[d.date] = d; });
+    }
+    var firstDay = new Date(year, month - 1, 1).getDay();
+    var daysInMonth = new Date(year, month, 0).getDate();
+    var today = new Date();
+    var todayStr = today.getFullYear() + "-" + ((today.getMonth() + 1) < 10 ? "0" : "") + (today.getMonth() + 1) + "-" + (today.getDate() < 10 ? "0" : "") + today.getDate();
+    var html = "";
+    var dayLabels = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    dayLabels.forEach(function(l) { html += "<div class='cal-day-label'>" + l + "</div>"; });
+    for (var i = 0; i < firstDay; i++) {
+      html += "<div class='cal-day empty'></div>";
+    }
+    for (var d = 1; d <= daysInMonth; d++) {
+      var dateStr = year + "-" + m + "-" + (d < 10 ? "0" : "") + d;
+      var dayData = daysMap[dateStr];
+      var cls = "cal-day";
+      if (dayData) cls += " " + dayData.status;
+      if (dateStr === todayStr) cls += " today";
+      var label = dayData ? "RM" + dayData.spent.toFixed(0) : "";
+      html += "<div class='" + cls + "' onclick='openDayDetail(\"" + dateStr + "\")' title='" + label + "'>" + d + "</div>";
+    }
+    grid.innerHTML = html;
+  });
+}
+
+function prevMonth() {
+  calendarDate.setMonth(calendarDate.getMonth() - 1);
+  loadCalendar(calendarDate.getFullYear(), calendarDate.getMonth() + 1);
+}
+
+function nextMonth() {
+  calendarDate.setMonth(calendarDate.getMonth() + 1);
+  loadCalendar(calendarDate.getFullYear(), calendarDate.getMonth() + 1);
+}
+
+function openDayDetail(dateStr) {
+  document.getElementById("dayDetailPanel").classList.add("open");
+  document.getElementById("dayDetailTitle").textContent = dateStr;
+  document.getElementById("dayDetailBody").innerHTML = "<p class='day-detail-empty'>Loading...</p>";
+  api("/calendar/day?date=" + dateStr).then(function(data) {
+    if (!data) { document.getElementById("dayDetailBody").innerHTML = "<p class='day-detail-empty'>No data</p>"; return; }
+    var html = "";
+    var allItems = [];
+    if (data.expenditures) {
+      data.expenditures.forEach(function(e) {
+        allItems.push({ icon: getCategoryEmoji(e.category), desc: e.category + (e.note ? " - " + e.note : ""), amount: e.amount });
+      });
+    }
+    if (data.transactions) {
+      data.transactions.forEach(function(t) {
+        allItems.push({ icon: getCategoryEmoji(t.category), desc: t.merchant + " - " + (t.description || ""), amount: t.amount });
+      });
+    }
+    if (allItems.length === 0) {
+      html += "<p class='day-detail-empty'>No spending on this day</p>";
+    } else {
+      html += "<div class='expense-list'>";
+      allItems.forEach(function(item) {
+        html += "<div class='expense-item'>" +
+          "<span class='expense-icon'>" + item.icon + "</span>" +
+          "<div class='expense-details'><p class='expense-category'>" + item.desc + "</p></div>" +
+          "<span class='expense-amount'>RM " + parseFloat(item.amount).toFixed(2) + "</span>" +
+        "</div>";
+      });
+      html += "</div>";
+    }
+    html += "<div class='day-detail-saved'>💰 Saved: <span>RM " + (data.totalSaved || 0).toFixed(2) + "</span></div>";
+    document.getElementById("dayDetailBody").innerHTML = html;
+  });
+}
+
+function closeDayDetail() {
+  document.getElementById("dayDetailPanel").classList.remove("open");
+}
 
 document.addEventListener("DOMContentLoaded", init);

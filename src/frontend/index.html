@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GXSave - Behavioural Finance for GXBank</title>
+  <title>GuGa Saves - Smart Savings App</title>
   <link rel="stylesheet" href="/styles/main.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
@@ -12,10 +12,10 @@
     <div id="authScreen" class="auth-screen">
       <div class="auth-container">
         <div class="auth-logo">
-          <span class="logo-icon">GX</span>
+          <span class="logo-icon">GG</span>
           <span class="logo-text">Save</span>
         </div>
-        <h1 class="auth-title">Welcome to GXSave</h1>
+        <h1 class="auth-title">Welcome to GuGa Saves</h1>
         <p class="auth-subtitle">Smart savings powered by behavioural finance</p>
 
         <div id="loginForm" class="auth-form">
@@ -57,7 +57,7 @@
       <header class="header">
         <div class="header-left">
           <div class="logo">
-            <span class="logo-icon">GX</span>
+            <span class="logo-icon">GG</span>
             <span class="logo-text">Save</span>
           </div>
         </div>
@@ -123,12 +123,22 @@
             <div class="streak-calendar" id="streakCalendar"></div>
           </section>
 
-          <section class="gamification-section" id="gamificationProfile"></section>
+          <section class="calendar-section">
+            <div class="calendar-header">
+              <button onclick="prevMonth()">◀</button>
+              <h2 id="calendarMonth">May 2026</h2>
+              <button onclick="nextMonth()">▶</button>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </section>
 
-          <section class="nudges-section">
-            <h2 class="section-title">Today's Nudges</h2>
-            <div id="nudgeList" class="nudge-list">
-              <p class="empty-state">No nudges yet</p>
+          <section class="expenses-section" id="todayExpensesSection">
+            <div class="expenses-header">
+              <h2 class="section-title">Today's Expenses</h2>
+              <span class="expenses-total" id="todayExpenseTotal">RM 0</span>
+            </div>
+            <div id="todayExpensesList" class="expense-list">
+              <p class="empty-state">No expenses logged today</p>
             </div>
           </section>
 
@@ -146,38 +156,52 @@
             </div>
           </section>
 
-          <section class="expenses-section" id="todayExpensesSection">
-            <div class="expenses-header">
-              <h2 class="section-title">Today's Expenses</h2>
-              <span class="expenses-total" id="todayExpenseTotal">RM 0</span>
-            </div>
-            <div id="todayExpensesList" class="expense-list">
-              <p class="empty-state">No expenses logged today</p>
+          <section class="gamification-section" id="gamificationProfile"></section>
+
+          <section class="nudges-section">
+            <h2 class="section-title">Today's Nudges</h2>
+            <div id="nudgeList" class="nudge-list">
+              <p class="empty-state">No nudges yet</p>
             </div>
           </section>
 
           <section class="quick-actions">
             <h2 class="section-title">Quick Actions</h2>
+            <h3 class="action-category">💰 Money</h3>
             <div class="action-grid">
               <button class="action-btn action-btn-highlight" onclick="openExpenseModal()" id="logExpenseBtn">
                 <span class="action-icon">💸</span>
                 <span class="action-label">Log Expense</span>
               </button>
-              <button class="action-btn" onclick="showTab('autosave')">
-                <span class="action-icon">⚡</span>
-                <span class="action-label">Enable Round-Up</span>
+              <button class="action-btn" onclick="openRoundUpPanel()" id="roundUpQuickBtn">
+                <span class="action-icon">🪙</span>
+                <span class="action-label">Round-Up</span>
               </button>
               <button class="action-btn" onclick="openNewGoalModal()">
                 <span class="action-icon">🎯</span>
                 <span class="action-label">New Goal</span>
               </button>
+            </div>
+            <h3 class="action-category">📊 Insights</h3>
+            <div class="action-grid">
+              <button class="action-btn action-btn-advisor" onclick="openAdvisor()" id="advisorBtn">
+                <span class="action-icon">💡</span>
+                <span class="action-label">My Advisor</span>
+              </button>
+              <button class="action-btn" onclick="showTab('insights')">
+                <span class="action-icon">🧠</span>
+                <span class="action-label">Analyse Spending</span>
+              </button>
+            </div>
+            <h3 class="action-category">👥 Social</h3>
+            <div class="action-grid">
               <button class="action-btn" onclick="showTab('social')">
                 <span class="action-icon">👥</span>
                 <span class="action-label">Join Group</span>
               </button>
-              <button class="action-btn" onclick="loadInsights()">
-                <span class="action-icon">🧠</span>
-                <span class="action-label">Analyse Spending</span>
+              <button class="action-btn" onclick="showTab('social')">
+                <span class="action-icon">⚔️</span>
+                <span class="action-label">Daily Quests</span>
               </button>
             </div>
           </section>
@@ -196,7 +220,7 @@
         <div id="insightsTab" class="tab-content">
           <div class="tab-header">
             <h2>AI Insights</h2>
-            <button class="btn-secondary" onclick="loadInsights()">Refresh</button>
+            <button class="btn-secondary" onclick="refreshInsights()">Refresh</button>
           </div>
           <div id="insightsContent" class="insights-content">
             <p class="empty-state">Click Refresh to generate AI insights</p>
@@ -218,23 +242,63 @@
 
         <div id="socialTab" class="tab-content">
           <div class="tab-header">
-            <h2>Savings Groups</h2>
-            <button class="btn-primary" onclick="openNewGroupModal()">+ Create Group</button>
+            <h2>Social</h2>
+            <button class="btn-primary" onclick="openNewGroupModal()">+ Create Clan</button>
           </div>
-          <div id="groupsList" class="goals-list">
-            <p class="empty-state">No groups yet. Create or join a savings group!</p>
+
+          <section class="quests-section">
+            <h2 class="section-title">⚔️ Daily Quests</h2>
+            <div id="questsList" class="quests-list"></div>
+          </section>
+
+          <section class="my-groups-section">
+            <h2 class="section-title">My Clans</h2>
+            <div id="myGroupsList" class="groups-grid"></div>
+          </section>
+
+          <section class="discover-section">
+            <h2 class="section-title">Discover Clans</h2>
+            <div id="discoverGroupsList" class="groups-grid"></div>
+          </section>
+        </div>
+
+        <div id="groupDetailOverlay" class="group-detail-overlay">
+          <div class="group-detail-header">
+            <button class="btn-secondary" onclick="closeGroupDetail()">← Back</button>
+            <h2 id="groupDetailName">Group</h2>
+            <div style="width:60px"></div>
           </div>
-          <div id="leaderboard" class="leaderboard-section" style="display:none">
-            <h3 class="section-title">Leaderboard</h3>
-            <div id="leaderboardList" class="leaderboard-list"></div>
+          <div class="group-detail-tabs">
+            <button class="gd-tab active" onclick="switchGroupTab('chat')">💬 Chat</button>
+            <button class="gd-tab" onclick="switchGroupTab('members')">👥 Members</button>
+            <button class="gd-tab" onclick="switchGroupTab('leaderboard')">🏆 Leaderboard</button>
+          </div>
+          <div id="groupDetailContent" class="group-detail-content"></div>
+          <div class="chat-input-bar" id="chatInputBar">
+            <input type="text" id="chatInput" placeholder="Type a message...">
+            <button class="btn-primary" onclick="sendMessage()">Send</button>
           </div>
         </div>
       </main>
 
+      <div id="streakOverlay" class="streak-overlay">
+        <div class="streak-overlay-content">
+          <div class="streak-confetti" id="streakConfetti"></div>
+          <div class="streak-anim-fire" id="streakAnimFire">🔥</div>
+          <p class="streak-anim-count" id="streakAnimCount">0</p>
+          <p class="streak-anim-label">Day Streak!</p>
+          <p class="streak-anim-msg" id="streakAnimMsg">Keep it up!</p>
+          <button class="btn-primary streak-anim-btn" onclick="dismissStreakOverlay()">Continue</button>
+        </div>
+      </div>
+
       <div id="nudgePanel" class="nudge-panel">
         <div class="nudge-panel-header">
           <h3>Notifications</h3>
-          <button class="close-btn" onclick="toggleNudgePanel()">✕</button>
+          <div class="nudge-panel-actions">
+            <button class="btn-mark-all" id="markAllReadBtn" onclick="markAllRead()">Mark all read</button>
+            <button class="close-btn" onclick="toggleNudgePanel()">✕</button>
+          </div>
         </div>
         <div id="nudgePanelList" class="nudge-panel-list">
           <p class="empty-state">No notifications</p>
@@ -346,6 +410,80 @@
               <button type="submit" class="btn-primary">Log Expense</button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <div id="roundUpPanel" class="roundup-panel">
+        <div class="roundup-panel-header">
+          <h2>🪙 Round-Up Savings</h2>
+          <button class="close-btn" onclick="closeRoundUpPanel()">✕</button>
+        </div>
+        <div class="roundup-panel-body">
+          <div class="roundup-demo" id="roundUpDemo">
+            <div class="roundup-example">
+              <p class="roundup-example-label">You spend</p>
+              <p class="roundup-example-amount" id="roundUpSpend">RM 4.70</p>
+              <p class="roundup-example-label">We round up to</p>
+              <p class="roundup-example-rounded" id="roundUpRounded">RM 5.00</p>
+              <div class="roundup-coin-trail" id="coinTrail"></div>
+              <p class="roundup-example-saved">RM 0.30 → Savings 🐷</p>
+            </div>
+          </div>
+          <div class="roundup-toggle-card">
+            <div class="roundup-toggle-info">
+              <h3>Enable Round-Up</h3>
+              <p>Every purchase is rounded up to the nearest RM. The spare change goes to your savings.</p>
+            </div>
+            <label class="toggle-switch toggle-lg">
+              <input type="checkbox" id="roundUpToggle" onchange="handleRoundUpToggle(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="roundup-stats" id="roundUpStats">
+            <div class="roundup-stat">
+              <p class="roundup-stat-value" id="roundUpTotal">RM 0</p>
+              <p class="roundup-stat-label">Total Saved</p>
+            </div>
+            <div class="roundup-stat">
+              <p class="roundup-stat-value" id="roundUpCount">0</p>
+              <p class="roundup-stat-label">Round-Ups</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="badgeOverlay" class="badge-overlay">
+        <div class="badge-overlay-content">
+          <div class="badge-particles" id="badgeParticles"></div>
+          <div class="badge-earned-icon" id="badgeEarnedIcon">🏅</div>
+          <p class="badge-earned-name" id="badgeEarnedName">Badge Name</p>
+          <p class="badge-earned-desc" id="badgeEarnedDesc">Badge description</p>
+          <button class="btn-primary" onclick="dismissBadgeOverlay()">Awesome!</button>
+        </div>
+      </div>
+
+      <div id="dayDetailPanel" class="day-detail-panel">
+        <div class="day-detail-header">
+          <h3 id="dayDetailTitle">Day Details</h3>
+          <button class="close-btn" onclick="closeDayDetail()">✕</button>
+        </div>
+        <div id="dayDetailBody" class="day-detail-body">
+          <p class="day-detail-empty">Loading...</p>
+        </div>
+      </div>
+
+      <div id="advisorOverlay" class="advisor-overlay">
+        <div class="advisor-header">
+          <h2>💡 My Financial Advisor</h2>
+          <button class="close-btn" onclick="closeAdvisor()">✕</button>
+        </div>
+        <div class="advisor-tabs">
+          <button class="advisor-tab active" onclick="switchAdvisorTab('daily')" id="advTabDaily">Daily</button>
+          <button class="advisor-tab" onclick="switchAdvisorTab('monthly')" id="advTabMonthly">Monthly</button>
+          <button class="advisor-tab" onclick="switchAdvisorTab('annual')" id="advTabAnnual">Annual</button>
+        </div>
+        <div id="advisorContent" class="advisor-content">
+          <p class="empty-state">Loading advice...</p>
         </div>
       </div>
     </div>

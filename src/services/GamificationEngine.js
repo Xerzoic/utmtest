@@ -232,6 +232,170 @@ class GamificationEngine {
     return result.rows
   }
 
+  async generateDailyQuests(userId) {
+    const today = new Date().toISOString().split('T')[0]
+    const existing = await db.query(
+      `SELECT COUNT(*) as count FROM daily_quests WHERE user_id = $1 AND quest_date = $2`,
+      [userId, today]
+    )
+    if (parseInt(existing.rows[0].count) > 0) return
+
+    const quests = [
+      { key: 'log_expense', title: 'Log an Expense', description: 'Record at least 1 daily expense', xp: 30, target: 1 },
+      { key: 'save_5', title: 'Save RM5 Today', description: 'Save at least RM5 through auto-save or round-ups', xp: 50, target: 5 },
+      { key: 'stay_under_50', title: 'Stay Under RM50', description: 'Keep your daily spending under RM50', xp: 40, target: 50 },
+    ]
+    for (const q of quests) {
+      await db.query(
+        `INSERT INTO daily_quests (id, user_id, quest_key, quest_title, quest_description, xp_reward, target_value, quest_date)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)`,
+        [userId, q.key, q.title, q.description, q.xp, q.target, today]
+      )
+    }
+  }
+
+  async getDailyQuests(userId) {
+    const today = new Date().toISOString().split('T')[0]
+    await this.generateDailyQuests(userId)
+    const quests = await db.query(
+      `SELECT * FROM daily_quests WHERE user_id = $1 AND quest_date = $2 ORDER BY quest_key`,
+      [userId, today]
+    )
+    return quests.rows
+  }
+
+  async completeQuest(userId, questKey) {
+    const today = new Date().toISOString().split('T')[0]
+    const quest = await db.query(
+      `SELECT * FROM daily_quests WHERE user_id = $1 AND quest_key = $2 AND quest_date = $3`,
+      [userId, questKey, today]
+    )
+    if (!quest.rows.length || quest.rows[0].is_completed) return null
+    await db.query(
+      `UPDATE daily_quests SET is_completed = 1, completed_at = datetime('now') WHERE id = $1`,
+      [quest.rows[0].id]
+    )
+    await db.query(
+      `UPDATE gamification_profiles SET xp = xp + $1 WHERE user_id = $2`,
+      [quest.rows[0].xp_reward, userId]
+    )
+    await this.checkLevelUp(userId)
+    return { xpGained: quest.rows[0].xp_reward, questKey }
+  }
+
+  async getGroupMessages(groupId, limit = 50) {
+    const messages = await db.query(
+      `SELECT gm.*, u.full_name FROM group_messages gm
+       JOIN users u ON u.id = gm.user_id
+       WHERE gm.group_id = $1 ORDER BY gm.sent_at DESC LIMIT $2`,
+      [groupId, limit]
+    )
+    return messages.rows.reverse()
+  }
+
+  async sendGroupMessage(groupId, userId, message) {
+    const result = await db.query(
+      `INSERT INTO group_messages (id, group_id, user_id, message)
+       VALUES (gen_random_uuid(), $1, $2, $3) RETURNING *`,
+      [groupId, userId, message]
+    )
+    const msg = result.rows[0]
+    const user = await db.query(`SELECT full_name FROM users WHERE id = $1`, [userId])
+    return { ...msg, full_name: user.rows[0]?.full_name }
+  }
+
+  async getGroupMembers(groupId) {
+    const members = await db.query(
+      `SELECT u.id, u.full_name, u.monthly_income, gm.role, gm.joined_at,
+              gp.level, gp.xp, COALESCE(ss.current_streak, 0) as streak,
+              COALESCE((SELECT SUM(amount) FROM autosave_transactions WHERE user_id = u.id), 0) as total_saved
+       FROM group_members gm
+       JOIN users u ON u.id = gm.user_id
+       LEFT JOIN gamification_profiles gp ON gp.user_id = u.id
+       LEFT JOIN savings_streaks ss ON ss.user_id = u.id
+       WHERE gm.group_id = $1
+       ORDER BY gm.joined_at`,
+      [groupId]
+    )
+    return members.rows
+  }
+
+  async checkAllBadges(userId) {
+    const earned = []
+    const existing = await db.query(`SELECT badge_key FROM badges WHERE user_id = $1`, [userId])
+    const have = new Set(existing.rows.map(function(r) { return r.badge_key }))
+
+    if (!have.has('first_save')) {
+      const autoTxn = await db.query(
+        `SELECT COUNT(*) as count FROM autosave_transactions WHERE user_id = $1`, [userId]
+      )
+      if (parseInt(autoTxn.rows[0].count) > 0) {
+        const b = await this.awardBadge(userId, 'first_save')
+        if (b) earned.push(b)
+      }
+    }
+
+    if (!have.has('group_joiner')) {
+      const groups = await db.query(
+        `SELECT COUNT(*) as count FROM group_members WHERE user_id = $1`, [userId]
+      )
+      if (parseInt(groups.rows[0].count) > 0) {
+        const b = await this.awardBadge(userId, 'group_joiner')
+        if (b) earned.push(b)
+      }
+    }
+
+    const streak = await db.query(
+      `SELECT current_streak FROM savings_streaks WHERE user_id = $1`, [userId]
+    )
+    const s = streak.rows[0]?.current_streak || 0
+    if (!have.has('streak_7') && s >= 7) {
+      const b = await this.awardBadge(userId, 'streak_7')
+      if (b) earned.push(b)
+    }
+    if (!have.has('streak_21') && s >= 21) {
+      const b = await this.awardBadge(userId, 'streak_21')
+      if (b) earned.push(b)
+    }
+    if (!have.has('streak_30') && s >= 30) {
+      const b = await this.awardBadge(userId, 'streak_30')
+      if (b) earned.push(b)
+    }
+
+    const savings = await db.query(
+      `SELECT COALESCE(SUM(current_amount), 0) as total FROM goals WHERE user_id = $1`, [userId]
+    )
+    const total = parseFloat(savings.rows[0].total)
+    if (!have.has('milestone_500') && total >= 500) {
+      const b = await this.awardBadge(userId, 'milestone_500')
+      if (b) earned.push(b)
+    }
+    if (!have.has('milestone_1000') && total >= 1000) {
+      const b = await this.awardBadge(userId, 'milestone_1000')
+      if (b) earned.push(b)
+    }
+    if (!have.has('milestone_5000') && total >= 5000) {
+      const b = await this.awardBadge(userId, 'milestone_5000')
+      if (b) earned.push(b)
+    }
+    if (!have.has('milestone_10000') && total >= 10000) {
+      const b = await this.awardBadge(userId, 'milestone_10000')
+      if (b) earned.push(b)
+    }
+
+    if (!have.has('round_up_100')) {
+      const ru = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM autosave_transactions WHERE user_id = $1 AND type = 'round_up'`, [userId]
+      )
+      if (parseFloat(ru.rows[0].total) >= 100) {
+        const b = await this.awardBadge(userId, 'round_up_100')
+        if (b) earned.push(b)
+      }
+    }
+
+    return earned
+  }
+
   async getProfile(userId) {
     const profile = await db.query(
       `SELECT * FROM gamification_profiles WHERE user_id = $1`,

@@ -9,7 +9,7 @@ const SEED_DATA = {
   users: [
     {
       id: uid(),
-      gxbank_account_id: 'GX001234567',
+      gxbank_account_id: 'GG001234567',
       full_name: 'Aisha Rahman',
       email: 'aisha.rahman@email.com',
       phone: '+60123456789',
@@ -19,7 +19,7 @@ const SEED_DATA = {
     },
     {
       id: uid(),
-      gxbank_account_id: 'GX001234568',
+      gxbank_account_id: 'GG001234568',
       full_name: 'Muhammad Hakim',
       email: 'hakim@email.com',
       phone: '+60123456790',
@@ -29,7 +29,7 @@ const SEED_DATA = {
     },
     {
       id: uid(),
-      gxbank_account_id: 'GX001234569',
+      gxbank_account_id: 'GG001234569',
       full_name: 'Lim Wei Ling',
       email: 'weiling@email.com',
       phone: '+60123456791',
@@ -242,6 +242,27 @@ async function seed() {
        'in_app', 'normal', 0, 0]
     )
     console.log('  Seeded 3 nudges')
+
+    const dummyGroups = [
+      { name: 'Budget Warriors', description: 'Emergency savings clan — we save for rainy days together!', goal_type: 'emergency', target_amount: 5000 },
+      { name: 'RM10K Racers', description: 'Race to RM10K in savings. First one there buys coffee!', goal_type: 'other', target_amount: 10000 },
+      { name: 'Zero Spend Squad', description: 'Minimize daily spending and hit zero-spend days together', goal_type: 'other', target_amount: null },
+      { name: 'Gig Savers', description: 'For freelancers — save 20% of every gig payment', goal_type: 'emergency', target_amount: 3000 },
+      { name: 'Student Stackers', description: 'Student-friendly saving group. Every ringgit counts!', goal_type: 'other', target_amount: 1000 },
+    ]
+    for (const g of dummyGroups) {
+      const gid = uid()
+      await db.query(
+        `INSERT INTO savings_groups (id, name, description, created_by, goal_type, target_amount)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [gid, g.name, g.description, u1.id, g.goal_type, g.target_amount]
+      )
+      await db.query(
+        `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'admin')`,
+        [gid, u1.id]
+      )
+    }
+    console.log('  Seeded 5 dummy groups')
 
     console.log('\nDatabase seeded successfully!')
     console.log(`\nDemo user: ${u1.full_name} (${u1.email})`)

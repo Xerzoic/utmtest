@@ -1,7 +1,7 @@
 {
-  "name": "gxsave-behavioural-finance",
+  "name": "guga-saves-behavioural-finance",
   "version": "1.0.0",
-  "description": "Behavioural Finance Engine for GXBank - Bridging financial awareness and consistent action for Malaysian savers",
+  "description": "Behavioural Finance Engine for GuGa Saves - Bridging financial awareness and consistent action for Malaysian savers",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
