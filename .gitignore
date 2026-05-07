@@ -9,3 +9,7 @@ npm-debug.log
 .vscode/
 .idea/
 *.log
+coverage/
+stderr*.txt
+stdout*.txt
+scratch/
