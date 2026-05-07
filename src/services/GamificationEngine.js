@@ -1,9 +1,20 @@
 const db = require('../database/connection')
 const config = require('../config')
 const nudgeEngine = require('./NudgeEngine')
+const ilmuAIService = require('./IlmuAIService')
 
 class GamificationEngine {
   constructor() {
+    this.questPool = [
+      { key: 'log_expense', title: 'Log an Expense', desc: 'Record at least 1 expense today', xp: 30, target: 1 },
+      { key: 'save_5', title: 'Save RM5', desc: 'Save RM5 via auto-save or round-ups', xp: 50, target: 5 },
+      { key: 'stay_under_50', title: 'Frugal Day', desc: 'Keep daily spending under RM50', xp: 40, target: 50 },
+      { key: 'log_3_expenses', title: 'Triple Tracker', desc: 'Log 3 expenses in one day', xp: 45, target: 3 },
+      { key: 'check_insights', title: 'Knowledge Seeker', desc: 'View your AI insights', xp: 20, target: 1 },
+      { key: 'set_goal', title: 'Goal Setter', desc: 'Create a new savings goal', xp: 50, target: 1 },
+      { key: 'zero_spend', title: 'Zero Hero', desc: 'Complete a zero-spend day', xp: 60, target: 0 },
+      { key: 'join_group', title: 'Social Saver', desc: 'Join a savings clan', xp: 35, target: 1 },
+    ]
     this.allBadges = {
       first_save: { name: 'First Step', description: 'Made your first automated save', icon: 'star' },
       streak_7: { name: 'Week Warrior', description: 'Saved 7 days in a row', icon: 'fire' },
@@ -156,8 +167,8 @@ class GamificationEngine {
 
   async createSavingsGroup(name, description, createdById, goalType, targetAmount) {
     const result = await db.query(
-      `INSERT INTO savings_groups (name, description, created_by, goal_type, target_amount)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO savings_groups (id, name, description, created_by, goal_type, target_amount)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)
        RETURNING *`,
       [name, description, createdById, goalType, targetAmount]
     )
@@ -183,7 +194,7 @@ class GamificationEngine {
     }
 
     await db.query(
-      `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'member')
+      `INSERT INTO group_members (id, group_id, user_id, role) VALUES (gen_random_uuid(), $1, $2, 'member')
        ON CONFLICT (group_id, user_id) DO NOTHING`,
       [groupId, userId]
     )
@@ -240,16 +251,20 @@ class GamificationEngine {
     )
     if (parseInt(existing.rows[0].count) > 0) return
 
-    const quests = [
-      { key: 'log_expense', title: 'Log an Expense', description: 'Record at least 1 daily expense', xp: 30, target: 1 },
-      { key: 'save_5', title: 'Save RM5 Today', description: 'Save at least RM5 through auto-save or round-ups', xp: 50, target: 5 },
-      { key: 'stay_under_50', title: 'Stay Under RM50', description: 'Keep your daily spending under RM50', xp: 40, target: 50 },
-    ]
-    for (const q of quests) {
+    const startOfYear = new Date(new Date().getFullYear(), 0, 0)
+    const diff = new Date() - startOfYear
+    const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const poolSize = this.questPool.length
+    const startIdx = (dayOfYear * 3) % poolSize
+    const selected = []
+    for (let i = 0; i < 3; i++) {
+      selected.push(this.questPool[(startIdx + i) % poolSize])
+    }
+    for (const q of selected) {
       await db.query(
         `INSERT INTO daily_quests (id, user_id, quest_key, quest_title, quest_description, xp_reward, target_value, quest_date)
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)`,
-        [userId, q.key, q.title, q.description, q.xp, q.target, today]
+        [userId, q.key, q.title, q.desc, q.xp, q.target, today]
       )
     }
   }
@@ -257,6 +272,7 @@ class GamificationEngine {
   async getDailyQuests(userId) {
     const today = new Date().toISOString().split('T')[0]
     await this.generateDailyQuests(userId)
+    await this.refillQuests(userId, today)
     const quests = await db.query(
       `SELECT * FROM daily_quests WHERE user_id = $1 AND quest_date = $2 ORDER BY quest_key`,
       [userId, today]
@@ -279,13 +295,80 @@ class GamificationEngine {
       `UPDATE gamification_profiles SET xp = xp + $1 WHERE user_id = $2`,
       [quest.rows[0].xp_reward, userId]
     )
+    await this.refillQuests(userId, today)
     await this.checkLevelUp(userId)
     return { xpGained: quest.rows[0].xp_reward, questKey }
   }
 
+  async refillQuests(userId, today) {
+    const active = await db.query(
+      `SELECT quest_key FROM daily_quests WHERE user_id = $1 AND quest_date = $2 AND is_completed = 0`,
+      [userId, today]
+    )
+    const activeKeySet = new Set(active.rows.map(r => r.quest_key))
+    const pool = this.questPool.filter(q => !activeKeySet.has(q.key))
+    const needed = 3 - active.rows.length
+    for (let i = 0; i < needed && i < pool.length; i++) {
+      const pick = Math.floor(Math.random() * (pool.length - i)) + i;
+      [pool[i], pool[pick]] = [pool[pick], pool[i]]
+      const q = pool[i]
+      await db.query(
+        `INSERT INTO daily_quests (id, user_id, quest_key, quest_title, quest_description, xp_reward, target_value, quest_date)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)`,
+        [userId, q.key, q.title, q.desc, q.xp, q.target, today]
+      )
+    }
+  }
+
+  async updateQuestProgress(userId, questKey, value) {
+    const today = new Date().toISOString().split('T')[0]
+    const quest = await db.query(
+      `SELECT * FROM daily_quests WHERE user_id = $1 AND quest_key = $2 AND quest_date = $3`,
+      [userId, questKey, today]
+    )
+    if (!quest.rows.length || quest.rows[0].is_completed) return null
+
+    if (questKey === 'stay_under_50') {
+      const dailyTotal = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM daily_expenditures WHERE user_id = $1 AND expenditure_date = $2`,
+        [userId, today]
+      )
+      const total = parseFloat(dailyTotal.rows[0].total)
+      if (total < 50) {
+        await db.query(
+          `UPDATE daily_quests SET current_value = $1 WHERE id = $2`,
+          [total, quest.rows[0].id]
+        )
+      }
+      return
+    }
+
+    if (questKey === 'zero_spend') {
+      const dailyTotal = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM daily_expenditures WHERE user_id = $1 AND expenditure_date = $2`,
+        [userId, today]
+      )
+      const total = parseFloat(dailyTotal.rows[0].total)
+      if (total === 0) {
+        return this.completeQuest(userId, questKey)
+      }
+      return
+    }
+
+    const currentValue = (quest.rows[0].current_value || 0) + value
+    await db.query(
+      `UPDATE daily_quests SET current_value = $1 WHERE id = $2`,
+      [currentValue, quest.rows[0].id]
+    )
+
+    if (currentValue >= quest.rows[0].target_value) {
+      return this.completeQuest(userId, questKey)
+    }
+  }
+
   async getGroupMessages(groupId, limit = 50) {
     const messages = await db.query(
-      `SELECT gm.*, u.full_name FROM group_messages gm
+      `SELECT gm.*, u.full_name, u.is_npc FROM group_messages gm
        JOIN users u ON u.id = gm.user_id
        WHERE gm.group_id = $1 ORDER BY gm.sent_at DESC LIMIT $2`,
       [groupId, limit]
@@ -304,9 +387,33 @@ class GamificationEngine {
     return { ...msg, full_name: user.rows[0]?.full_name }
   }
 
+  async triggerNPCResponse(groupId) {
+    if (Math.random() > 0.3) return
+    const npcs = await db.query(
+      `SELECT u.id, u.full_name FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = $1 AND u.is_npc = 1`,
+      [groupId]
+    )
+    if (!npcs.rows.length) return
+    const npc = npcs.rows[Math.floor(Math.random() * npcs.rows.length)]
+    const groupInfo = await db.query(`SELECT name FROM savings_groups WHERE id = $1`, [groupId])
+    const groupName = groupInfo.rows[0]?.name || 'savings group'
+    try {
+      const reply = await ilmuAIService.generateNPCMessage(npc.full_name, groupName)
+      if (reply) {
+        await db.query(
+          `INSERT INTO group_messages (id, group_id, user_id, message)
+           VALUES (gen_random_uuid(), $1, $2, $3)`,
+          [groupId, npc.id, reply]
+        )
+      }
+    } catch (e) {
+      // NPC reply failed silently
+    }
+  }
+
   async getGroupMembers(groupId) {
     const members = await db.query(
-      `SELECT u.id, u.full_name, u.monthly_income, gm.role, gm.joined_at,
+      `SELECT u.id, u.full_name, u.monthly_income, u.is_npc, gm.role, gm.joined_at,
               gp.level, gp.xp, COALESCE(ss.current_streak, 0) as streak,
               COALESCE((SELECT SUM(amount) FROM autosave_transactions WHERE user_id = u.id), 0) as total_saved
        FROM group_members gm
@@ -318,6 +425,18 @@ class GamificationEngine {
       [groupId]
     )
     return members.rows
+  }
+
+  async getAllBadgesForUser(userId) {
+    const earned = await db.query(`SELECT badge_key, earned_at FROM badges WHERE user_id = $1`, [userId])
+    const earnedKeys = new Set(earned.rows.map(r => r.badge_key))
+    const earnedMap = {}
+    earned.rows.forEach(r => { earnedMap[r.badge_key] = r.earned_at })
+    return Object.entries(this.allBadges).map(([key, badge]) => ({
+      key, ...badge,
+      earned: earnedKeys.has(key),
+      earned_at: earnedMap[key] || null,
+    }))
   }
 
   async checkAllBadges(userId) {

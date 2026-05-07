@@ -1,6 +1,7 @@
 const db = require('../database/connection')
 const config = require('../config')
 const nudgeEngine = require('./NudgeEngine')
+const ilmuAI = require('./IlmuAIService')
 
 class AIEngine {
   constructor() {
@@ -373,6 +374,41 @@ class AIEngine {
     if (score >= 60) return 'good'
     if (score >= 40) return 'fair'
     return 'at_risk'
+  }
+
+  async generateAIInsights(userId) {
+    const analysis = await this.analyseSpendingPatterns(userId)
+    const user = await db.query(`SELECT * FROM users WHERE id = $1`, [userId])
+    const goals = await db.query(`SELECT * FROM goals WHERE user_id = $1 AND is_active = true`, [userId])
+    const userData = user.rows[0]
+    if (!userData) return await this.generatePersonalisedInsights(userId)
+
+    const prompt = `Analyse this user's finances and give 3 actionable tips:
+Income: RM${userData.monthly_income}/month
+Monthly spending: RM${analysis.monthlyAverage.toFixed(0)}
+Top categories: ${Object.entries(analysis.categoryBreakdown).map(([k,v]) => k+': RM'+v.total.toFixed(0)).join(', ')}
+Trend: ${analysis.spendingTrend}
+Goals: ${goals.rows.map(g => g.name + ' (RM'+g.current_amount+'/'+g.target_amount+')').join(', ')}
+Respond in JSON: {"summary":"...","tips":[{"title":"...","message":"...","priority":"high|medium|low"}],"risks":[{"message":"...","severity":"high|medium"}]}`
+
+    try {
+      const raw = await ilmuAI.chat(
+        'You are a Malaysian financial advisor AI. Respond ONLY in valid JSON. Use RM currency. Be specific.',
+        prompt
+      )
+      const parsed = JSON.parse(raw)
+      const savingsRate = userData.monthly_income > 0
+        ? ((userData.monthly_income - analysis.monthlyAverage) / userData.monthly_income * 100).toFixed(1)
+        : 0
+      return {
+        ...parsed,
+        savingsRate: parseFloat(savingsRate),
+        financialHealth: this.assessFinancialHealth(userData, analysis, savingsRate),
+        cached: false,
+      }
+    } catch (e) {
+      return await this.generatePersonalisedInsights(userId)
+    }
   }
 
   getInsightNudgeTitle(health) {

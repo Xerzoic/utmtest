@@ -216,14 +216,15 @@ async function loadDashboard() {
   const budgetList = document.getElementById("budgetList");
   if (data.budgets?.length > 0) {
     budgetList.innerHTML = data.budgets.map(function(b) {
-      const pct = b.monthly_limit > 0 ? (b.current_spent / b.monthly_limit * 100) : 0;
-      const warnClass = pct > 75 ? " budget-warning" : "";
+      var pct = b.monthly_limit > 0 ? (b.current_spent / b.monthly_limit * 100) : 0;
+      var barWidth = Math.min(pct, 150);
+      var warnClass = pct > 100 ? " budget-exceeded" : pct > 75 ? " budget-warning" : "";
       return "<div class='budget-item" + warnClass + "'>" +
         "<div class='budget-header'>" +
           "<span class='budget-name'>" + b.category + "</span>" +
           "<span class='budget-amounts'>RM " + b.current_spent + " / RM " + b.monthly_limit + "</span>" +
         "</div>" +
-        "<div class='budget-bar'><div class='budget-fill" + (warnClass ? " budget-fill-warning" : "") + "' style='width: " + Math.min(pct, 100) + "%'></div></div>" +
+        "<div class='budget-bar'><div class='budget-fill" + (warnClass.includes("exceeded") ? " budget-fill-exceeded" : warnClass ? " budget-fill-warning" : "") + "' style='width: " + barWidth + "%'></div></div>" +
       "</div>";
     }).join("");
   }
@@ -254,19 +255,38 @@ function renderStreakCalendar(streak) {
   if (!cal) return;
   const today = new Date();
   const days = [];
+  const currentStreak = streak?.current_streak || 0;
   for (let i = 6; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dayNames = ["S","M","T","W","T","F","S"];
     const dayName = dayNames[d.getDay()];
     const isToday = d.toDateString() === today.toDateString();
-    const isActive = streak?.current_streak > (6 - i);
+    const isActive = currentStreak > (6 - i);
     let cls = "streak-day";
     if (isActive) cls += " active";
     if (isToday) cls += " today";
-    days.push("<div class='" + cls + "'>" + dayName + "</div>");
+    let label = dayName;
+    const dayIndex = i;
+    if (isActive && currentStreak - dayIndex === 7) label = "⭐";
+    else if (isActive && currentStreak - dayIndex === 21) label = "👑";
+    else if (isActive && currentStreak - dayIndex === 30) label = "💎";
+    days.push("<div class='" + cls + "'>" + label + "</div>");
   }
   cal.innerHTML = days.join("");
+  var milestoneEl = document.getElementById("streakMilestone");
+  if (!milestoneEl) {
+    milestoneEl = document.createElement("p");
+    milestoneEl.id = "streakMilestone";
+    milestoneEl.className = "streak-best";
+    cal.parentElement.appendChild(milestoneEl);
+  }
+  var msg = "";
+  if (currentStreak < 7) msg = (7 - currentStreak) + " more days to Week Warrior badge!";
+  else if (currentStreak < 21) msg = (21 - currentStreak) + " more days to Habit Master badge!";
+  else if (currentStreak < 30) msg = (30 - currentStreak) + " more days to Monthly Champion badge!";
+  else msg = "💎 Monthly Champion achieved!";
+  milestoneEl.textContent = msg;
 }
 
 function renderSpendingChart(categories) {
@@ -312,6 +332,7 @@ async function loadGamification() {
           "</div>";
         }).join("") : "<p class='empty-state'>No badges yet</p>") +
       "</div>" +
+      "<button class='btn-secondary' style='margin-top:12px;width:100%' onclick='openBadgeGallery()'>View All Badges</button>" +
     "</div>";
 }
 
@@ -349,8 +370,12 @@ function renderGoals(goals) {
 
 async function deleteGoal(goalId) {
   if (!confirm("Delete this goal?")) return;
-  await api("/goals/" + goalId, { method: "DELETE" });
-  loadGoals();
+  var result = await api("/goals/" + goalId, { method: "DELETE" });
+  if (result && result.success) {
+    loadGoals();
+  } else {
+    showNudgeToast({ title: "Delete Failed", message: "Could not delete goal", priority: "high" });
+  }
 }
 
 function getCategoryIcon(category) {
@@ -412,6 +437,12 @@ async function loadInsights() {
     html += "</div>";
   }
 
+  html += "<div class='insight-card'><h3>Quick Actions</h3><div class='insight-actions'>" +
+    "<button class='btn-secondary btn-sm' onclick='aiCreateBudget(\"food\", 500)'>Set Food Budget RM500</button>" +
+    "<button class='btn-secondary btn-sm' onclick='aiEnableRoundUp()'>Enable Round-Up</button>" +
+    "<button class='btn-secondary btn-sm' onclick='aiCreateGoal(\"Emergency Fund\", 10000)'>Set RM10K Goal</button>" +
+  "</div></div>";
+
   content.innerHTML = html;
 }
 
@@ -446,12 +477,35 @@ async function refreshInsights() {
     }).join("");
     html += "</div>";
   }
+
+  html += "<div class='insight-card'><h3>Quick Actions</h3><div class='insight-actions'>" +
+    "<button class='btn-secondary btn-sm' onclick='aiCreateBudget(\"food\", 500)'>Set Food Budget RM500</button>" +
+    "<button class='btn-secondary btn-sm' onclick='aiEnableRoundUp()'>Enable Round-Up</button>" +
+    "<button class='btn-secondary btn-sm' onclick='aiCreateGoal(\"Emergency Fund\", 10000)'>Set RM10K Goal</button>" +
+  "</div></div>";
+
   content.innerHTML = html;
 }
 
 async function loadRules() {
   const data = await api("/autosave/rules");
   if (data) renderRules(data);
+}
+
+function getRuleDescription(rule) {
+  var config = typeof rule.config === 'string' ? JSON.parse(rule.config) : rule.config;
+  switch (rule.rule_type) {
+    case 'round_up':
+      return 'Rounds up every purchase to the nearest RM1. Spare change goes to savings.';
+    case 'salary_trigger':
+      return 'Auto-saves ' + (config.percentage || 10) + '% of your salary when it arrives.';
+    case 'fixed_schedule':
+      return 'Saves RM' + (config.amount || 0) + ' on a ' + (config.frequency || 'weekly') + ' schedule.';
+    case 'spending_threshold':
+      return 'Saves the difference when you underspend your budget.';
+    default:
+      return 'Automated savings rule';
+  }
 }
 
 function renderRules(rules) {
@@ -465,7 +519,7 @@ function renderRules(rules) {
         "<span class='rule-type-icon'>" + icon + "</span>" +
         "<div class='rule-info'>" +
           "<h3 class='rule-name'>" + typeDisplay + "</h3>" +
-          "<p class='rule-desc'>" + JSON.stringify(r.config) + "</p>" +
+          "<p class='rule-desc'>" + getRuleDescription(r) + "</p>" +
         "</div>" +
         "<button class='delete-btn' onclick='deleteRule(\"" + r.id + "\")' title='Delete rule'>🗑️</button>" +
         "<label class='toggle-switch'>" +
@@ -551,36 +605,6 @@ async function createGroup(e) {
     closeModal("newGroupModal");
     alert("Group created!");
   }
-}
-
-async function loadGroups() {
-  const data = await api("/groups");
-  const list = document.getElementById("groupsList");
-  if (!list) return;
-  if (data?.length > 0) {
-    list.innerHTML = data.map(function(g) {
-      return "<div class='group-card'>" +
-        "<h3>" + g.name + "</h3>" +
-        "<p>" + (g.description || "") + "</p>" +
-        "<button class='btn-secondary' onclick='viewGroup(\"" + g.id + "\")'>View Leaderboard</button>" +
-      "</div>";
-    }).join("");
-  }
-}
-
-async function viewGroup(groupId) {
-  const lb = await api("/groups/" + groupId + "/leaderboard");
-  if (!lb) return;
-  const lbSection = document.getElementById("leaderboard");
-  const lbList = document.getElementById("leaderboardList");
-  lbSection.style.display = "block";
-  lbList.innerHTML = lb.map(function(member, i) {
-    return "<div class='leaderboard-item rank-" + (i+1) + "'>" +
-      "<span class='rank-badge'>" + (i+1) + "</span>" +
-      "<span class='lb-name'>" + member.full_name + "</span>" +
-      "<span class='lb-saved'>RM " + parseFloat(member.total_saved || 0).toFixed(2) + "</span>" +
-    "</div>";
-  }).join("");
 }
 
 function showTab(tabName) {
@@ -760,6 +784,7 @@ async function loadTodayExpenses() {
           "<p class='expense-note'>" + (e.note || "") + "</p>" +
         "</div>" +
         "<span class='expense-amount'>RM " + parseFloat(e.amount).toFixed(2) + "</span>" +
+        "<button class='delete-btn' onclick='deleteExpense(\"" + e.id + "\")'>🗑️</button>" +
       "</div>";
     }).join("");
   } else {
@@ -774,6 +799,7 @@ function closeModal(modalId) { document.getElementById(modalId).classList.remove
 
 var roundUpDemoInterval = null;
 var stateAdviceData = null;
+var _prevCompletedQuests = {};
 
 function openAdvisor() {
   document.getElementById("advisorOverlay").classList.add("open");
@@ -862,8 +888,6 @@ function renderAdviceTab(period) {
 
   content.innerHTML = html;
 }
-
-var roundUpDemoInterval = null;
 
 function openRoundUpPanel() {
   document.getElementById("roundUpPanel").classList.add("open");
@@ -1001,6 +1025,35 @@ function dismissBadgeOverlay() {
   document.getElementById("badgeOverlay").classList.remove("open");
 }
 
+async function openBadgeGallery() {
+  var badges = await api("/badges");
+  if (!badges) return;
+  document.getElementById("badgeGalleryOverlay").classList.add("open");
+  renderBadgeGallery(badges);
+}
+
+function renderBadgeGallery(badges) {
+  var earnedCount = badges.filter(function(b) { return b.earned; }).length;
+  document.getElementById("badgeGalleryCount").textContent = earnedCount + "/" + badges.length + " Collected";
+  document.getElementById("badgeGalleryGrid").innerHTML = badges.map(function(b) {
+    var cls = "badge-gallery-item" + (b.earned ? " earned" : " locked");
+    var icon = b.earned ? getBadgeIcon(b.icon) : "🔒";
+    var name = b.name;
+    var desc = b.earned ? b.description : "???";
+    var dateHtml = b.earned && b.earned_at ? "<p class='badge-gallery-date'>Earned: " + new Date(b.earned_at).toLocaleDateString() + "</p>" : "";
+    return "<div class='" + cls + "'>" +
+      "<div class='badge-gallery-icon'>" + icon + "</div>" +
+      "<div class='badge-gallery-name'>" + name + "</div>" +
+      "<div class='badge-gallery-desc'>" + desc + "</div>" +
+      dateHtml +
+    "</div>";
+  }).join("");
+}
+
+function closeBadgeGallery() {
+  document.getElementById("badgeGalleryOverlay").classList.remove("open");
+}
+
 var activeGroupId = null;
 
 async function loadSocialTab() {
@@ -1014,14 +1067,14 @@ async function loadSocialTab() {
 
 function renderQuests(quests) {
   var list = document.getElementById("questsList");
-  if (!Array.isArray(quests) || quests.length === 0) {
+  var active = Array.isArray(quests) ? quests.filter(function(q) { return !q.is_completed; }) : [];
+  if (active.length === 0) {
     list.innerHTML = "<p class='empty-state'>No quests today</p>";
     return;
   }
-  list.innerHTML = quests.map(function(q) {
+  list.innerHTML = active.map(function(q) {
     var pct = q.target_value > 0 ? Math.min((q.current_value / q.target_value) * 100, 100) : 0;
-    var done = q.is_completed ? " quest-done" : "";
-    return "<div class='quest-card" + done + "'>" +
+    return "<div class='quest-card quest-pop'>" +
       "<div class='quest-header'>" +
         "<div class='quest-info'>" +
           "<h3 class='quest-title'>" + q.quest_title + "</h3>" +
@@ -1029,12 +1082,21 @@ function renderQuests(quests) {
         "</div>" +
         "<span class='quest-xp'>+" + q.xp_reward + " XP</span>" +
       "</div>" +
-      (q.is_completed
-        ? "<div class='quest-complete-badge'>✅ Completed!</div>"
-        : "<div class='quest-bar'><div class='quest-fill' style='width:" + pct + "%'></div></div>" +
-          "<p class='quest-progress-text'>" + (q.current_value || 0) + " / " + q.target_value + "</p>") +
+      "<div class='quest-bar'><div class='quest-fill' style='width:" + pct + "%'></div></div>" +
+      "<p class='quest-progress-text'>" + (q.current_value || 0) + " / " + q.target_value + "</p>" +
     "</div>";
   }).join("");
+
+  if (Array.isArray(quests)) {
+    quests.forEach(function(q) {
+      if (q.is_completed && !_prevCompletedQuests[q.quest_key]) {
+        _prevCompletedQuests[q.quest_key] = true;
+        playSound("quest");
+        showNudgeToast({ title: "Quest Complete!", message: "+" + q.xp_reward + " XP", priority: "normal" });
+      }
+      if (!q.is_completed) delete _prevCompletedQuests[q.quest_key];
+    });
+  }
 }
 
 function renderGroups(groups) {
@@ -1061,10 +1123,54 @@ function groupCard(g, isMember) {
     "<p class='group-desc'>" + (g.description || "") + "</p>" +
     "<div class='group-card-actions'>" +
       (isMember
-        ? "<button class='btn-secondary' onclick='openGroupDetail(\"" + g.id + "\")'>Open</button>"
+        ? "<button class='btn-secondary' onclick='openGroupDetail(\"" + g.id + "\")'>Open</button><button class='delete-btn' onclick='leaveGroup(\"" + g.id + "\")'>Leave</button>"
         : "<button class='btn-primary' onclick='joinGroup(\"" + g.id + "\")'>Join</button>") +
     "</div>" +
   "</div>";
+}
+
+async function aiCreateBudget(category, limit) {
+  var data = await api("/ai/action", {
+    method: "POST",
+    body: JSON.stringify({ action: "create_budget", category, limit }),
+  });
+  if (data) showNudgeToast({ title: "Budget Set!", message: "RM" + limit + " budget for " + category, priority: "normal" });
+}
+
+async function aiEnableRoundUp() {
+  var data = await api("/ai/action", {
+    method: "POST",
+    body: JSON.stringify({ action: "enable_roundup" }),
+  });
+  if (data) showNudgeToast({ title: "Round-Up Enabled!", message: "Your purchases will now round up to savings", priority: "normal" });
+}
+
+async function aiCreateGoal(name, amount) {
+  var data = await api("/ai/action", {
+    method: "POST",
+    body: JSON.stringify({ action: "create_goal", name, amount }),
+  });
+  if (data) showNudgeToast({ title: "Goal Created!", message: name + " - RM" + amount, priority: "normal" });
+}
+
+async function deleteExpense(expenseId) {
+  if (!confirm("Delete this expense?")) return;
+  var result = await api("/expenditures/" + expenseId, { method: "DELETE" });
+  if (result && result.success) {
+    loadDashboard();
+  } else {
+    showNudgeToast({ title: "Delete Failed", message: "Could not delete expense", priority: "high" });
+  }
+}
+
+async function leaveGroup(groupId) {
+  if (!confirm("Leave this group?")) return;
+  var result = await api("/groups/" + groupId + "/leave", { method: "DELETE" });
+  if (result && result.success) {
+    loadSocialTab();
+  } else {
+    showNudgeToast({ title: "Leave Failed", message: "Could not leave group", priority: "high" });
+  }
 }
 
 async function joinGroup(groupId) {
@@ -1123,8 +1229,9 @@ function renderChat(messages) {
   var html = "<div class='chat-messages'>";
   messages.forEach(function(m) {
     var isOwn = m.user_id === userId;
+    var nameTag = (m.full_name || "Unknown") + (m.is_npc ? " 🤖" : "");
     html += "<div class='chat-msg" + (isOwn ? " chat-msg-own" : "") + "'>" +
-      (!isOwn ? "<span class='chat-msg-author'>" + (m.full_name || "Unknown") + "</span>" : "") +
+      (!isOwn ? "<span class='chat-msg-author'>" + nameTag + "</span>" : "") +
       "<div class='chat-msg-bubble'>" + m.message + "</div>" +
       "<span class='chat-msg-time'>" + timeAgo(m.sent_at) + "</span>" +
     "</div>";
@@ -1154,10 +1261,11 @@ function renderMembers(members) {
   }
   var html = "<div class='members-list'>";
   members.forEach(function(m) {
+    var nameTag = m.full_name + (m.is_npc ? " 🤖" : "");
     html += "<div class='member-item'>" +
       "<div class='member-avatar'>" + (m.full_name || "?").substring(0, 2).toUpperCase() + "</div>" +
       "<div class='member-info'>" +
-        "<p class='member-name'>" + m.full_name + "</p>" +
+        "<p class='member-name'>" + nameTag + "</p>" +
         "<p class='member-stats'>Level " + (m.level || 1) + " • " + (m.streak || 0) + " day streak</p>" +
       "</div>" +
       "<span class='member-level-badge'>Lv" + (m.level || 1) + "</span>" +

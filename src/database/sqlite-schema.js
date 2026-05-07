@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   date_of_birth TEXT,
   monthly_income REAL,
   risk_profile TEXT DEFAULT 'moderate',
+  is_npc INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );

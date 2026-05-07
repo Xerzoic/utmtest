@@ -14,7 +14,7 @@ class DashboardController {
         db.query(`SELECT * FROM goals WHERE user_id = $1 AND is_active = true ORDER BY priority`, [userId]),
         db.query(`SELECT * FROM savings_streaks WHERE user_id = $1`, [userId]),
         db.query(`SELECT xp, level, total_badges FROM gamification_profiles WHERE user_id = $1`, [userId]),
-        db.query(`SELECT * FROM budgets WHERE user_id = $1 AND period_month = EXTRACT(MONTH FROM NOW()) AND period_year = EXTRACT(YEAR FROM NOW())`, [userId]),
+        db.query(`SELECT * FROM budgets WHERE user_id = $1 AND period_month = CAST(strftime('%m', 'now') AS INTEGER) AND period_year = CAST(strftime('%Y', 'now') AS INTEGER)`, [userId]),
         db.query(`SELECT * FROM nudges WHERE user_id = $1 AND is_read = false ORDER BY delivered_at DESC LIMIT 5`, [userId]),
         db.query(`SELECT COALESCE(SUM(total_saved), 0) as total_auto_saved, COUNT(*) as rule_count FROM autosave_rules WHERE user_id = $1 AND is_active = true`, [userId]),
       ])
@@ -27,8 +27,8 @@ class DashboardController {
         `SELECT category, COALESCE(SUM(amount), 0) as total
          FROM transactions
          WHERE user_id = $1 AND type = 'debit'
-         AND EXTRACT(MONTH FROM transaction_date) = EXTRACT(MONTH FROM NOW())
-         AND EXTRACT(YEAR FROM transaction_date) = EXTRACT(YEAR FROM NOW())
+         AND strftime('%m', transaction_date) = strftime('%m', 'now')
+         AND strftime('%Y', transaction_date) = strftime('%Y', 'now')
          GROUP BY category
          ORDER BY total DESC`,
         [userId]
@@ -69,7 +69,8 @@ class DashboardController {
         return res.json({ ...parsed, cached: true })
       }
 
-      const insights = await aiEngine.generatePersonalisedInsights(userId)
+      const insights = await aiEngine.generateAIInsights(userId)
+      await gamificationEngine.updateQuestProgress(userId, 'check_insights', 1)
       res.json({ ...insights, cached: false })
     } catch (error) {
       res.status(500).json({ error: error.message })
@@ -101,8 +102,8 @@ class DashboardController {
       const { name, target_amount, deadline, category, icon, priority } = req.body
 
       const result = await db.query(
-        `INSERT INTO goals (user_id, name, target_amount, deadline, category, icon, priority)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        `INSERT INTO goals (id, user_id, name, target_amount, deadline, category, icon, priority)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7) RETURNING *`,
         [userId, name, target_amount, deadline, category, icon || 'target', priority || 'medium']
       )
 
@@ -110,6 +111,8 @@ class DashboardController {
         `UPDATE gamification_profiles SET xp = xp + 50, updated_at = NOW() WHERE user_id = $1`,
         [userId]
       )
+
+      await gamificationEngine.updateQuestProgress(userId, 'set_goal', 1)
 
       const badgeEarned = await gamificationEngine.checkAllBadges(userId)
       const response = result.rows[0]
@@ -367,6 +370,7 @@ class DashboardController {
       const { message } = req.body
       if (!message) return res.status(400).json({ error: 'Message is required' })
       const result = await gamificationEngine.sendGroupMessage(groupId, userId, message)
+      await gamificationEngine.triggerNPCResponse(groupId)
       res.status(201).json(result)
     } catch (error) { res.status(500).json({ error: error.message }) }
   }
@@ -397,6 +401,7 @@ class DashboardController {
       const { groupId } = req.params
 
       const result = await gamificationEngine.joinSavingsGroup(groupId, userId)
+      await gamificationEngine.updateQuestProgress(userId, 'join_group', 1)
       res.json(result)
     } catch (error) {
       res.status(400).json({ error: error.message })
@@ -454,7 +459,36 @@ class DashboardController {
 
       const txn = txnResult.rows[0]
       await autoSaveEngine.executeRoundUp(txn.id)
+
+      const now = new Date()
+      const month = now.getMonth() + 1
+      const year = now.getFullYear()
+      const existingBudget = await db.query(
+        `SELECT id FROM budgets WHERE user_id = $1 AND category = $2 AND period_month = $3 AND period_year = $4`,
+        [userId, category, month, year]
+      )
+      if (existingBudget.rows.length) {
+        await db.query(
+          `UPDATE budgets SET current_spent = current_spent + $1, updated_at = datetime('now')
+           WHERE user_id = $2 AND category = $3 AND period_month = $4 AND period_year = $5`,
+          [amount, userId, category, month, year]
+        )
+      } else {
+        const userRows = await db.query(`SELECT monthly_income FROM users WHERE id = $1`, [userId])
+        const income = userRows.rows[0]?.monthly_income || 5000
+        const limits = { food: 0.15, transport: 0.1, shopping: 0.1, entertainment: 0.05, bills: 0.15, health: 0.05, education: 0.05, groceries: 0.1, other: 0.1 }
+        const limit = income * (limits[category] || 0.1)
+        await db.query(
+          `INSERT INTO budgets (id, user_id, category, monthly_limit, current_spent, period_month, period_year)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)`,
+          [userId, category, limit, amount, month, year]
+        )
+      }
+
       await nudgeEngine.checkBudgetAlerts(userId)
+
+      await gamificationEngine.updateQuestProgress(userId, 'log_expense', 1)
+      await gamificationEngine.updateQuestProgress(userId, 'log_3_expenses', 1)
 
       const badgeEarned = await gamificationEngine.checkAllBadges(userId)
       const response = result.rows[0]
@@ -570,6 +604,51 @@ class DashboardController {
     } catch (error) { res.status(500).json({ error: error.message }) }
   }
 
+  async deleteExpenditure(req, res) {
+    try {
+      const userId = req.user.id
+      const { expenseId } = req.params
+      const expense = await db.query(
+        `SELECT amount, category, expenditure_date FROM daily_expenditures WHERE id = $1 AND user_id = $2`,
+        [expenseId, userId]
+      )
+      if (!expense.rows.length) {
+        return res.status(404).json({ error: 'Expense not found' })
+      }
+      const { amount, category, expenditure_date } = expense.rows[0]
+      await db.query(`DELETE FROM daily_expenditures WHERE id = $1 AND user_id = $2`, [expenseId, userId])
+      const txn = await db.query(
+        `SELECT id FROM transactions WHERE user_id = $1 AND amount = $2 AND category = $3
+         AND transaction_date = $4 AND type = 'debit' AND merchant = 'Manual Entry' LIMIT 1`,
+        [userId, amount, category, expenditure_date]
+      )
+      if (txn.rows.length) {
+        await db.query(`DELETE FROM transactions WHERE id = $1`, [txn.rows[0].id])
+      }
+      const expDate = new Date(expenditure_date)
+      const month = expDate.getMonth() + 1
+      const year = expDate.getFullYear()
+      await db.query(
+        `UPDATE budgets SET current_spent = MAX(0, current_spent - $1), updated_at = datetime('now')
+         WHERE user_id = $2 AND category = $3 AND period_month = $4 AND period_year = $5`,
+        [amount, userId, category, month, year]
+      )
+      res.json({ success: true })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async leaveGroup(req, res) {
+    try {
+      const userId = req.user.id
+      const { groupId } = req.params
+      const result = await db.query(`DELETE FROM group_members WHERE group_id = $1 AND user_id = $2 AND role != 'admin'`, [groupId, userId])
+      if (result.rowCount === 0) {
+        return res.status(400).json({ error: 'Cannot leave group as admin. Transfer ownership first or delete the group.' })
+      }
+      res.json({ success: true })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
   async deleteGoal(req, res) {
     try {
       const userId = req.user.id
@@ -585,6 +664,53 @@ class DashboardController {
       const { ruleId } = req.params
       await db.query(`DELETE FROM autosave_rules WHERE id = $1 AND user_id = $2`, [ruleId, userId])
       res.json({ success: true })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async handleAIAction(req, res) {
+    try {
+      const userId = req.user.id
+      const { action, category, limit, name, amount } = req.body
+      if (action === 'create_budget') {
+        const now = new Date()
+        const month = now.getMonth() + 1
+        const year = now.getFullYear()
+        await db.query(
+          `INSERT INTO budgets (id, user_id, category, monthly_limit, current_spent, period_month, period_year)
+           VALUES (gen_random_uuid(), $1, $2, $3, 0, $4, $5)
+           ON CONFLICT (user_id, category, period_month, period_year) DO UPDATE SET monthly_limit = $3`,
+          [userId, category, limit, month, year]
+        )
+        return res.json({ success: true, message: 'Budget created!' })
+      }
+      if (action === 'enable_roundup') {
+        const existing = await db.query(
+          `SELECT id FROM autosave_rules WHERE user_id = $1 AND rule_type = 'round_up' LIMIT 1`,
+          [userId]
+        )
+        if (existing.rows.length) {
+          await db.query(`UPDATE autosave_rules SET is_active = 1 WHERE id = $1`, [existing.rows[0].id])
+        } else {
+          await autoSaveEngine.createRule(userId, 'round_up', { destination_goal_id: null })
+        }
+        return res.json({ success: true, message: 'Round-up enabled!' })
+      }
+      if (action === 'create_goal') {
+        await db.query(
+          `INSERT INTO goals (id, user_id, name, target_amount, current_amount, category, priority)
+           VALUES (gen_random_uuid(), $1, $2, $3, 0, 'other', 'medium')`,
+          [userId, name, amount]
+        )
+        return res.json({ success: true, message: 'Goal created!' })
+      }
+      res.status(400).json({ error: 'Unknown action' })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async getAllBadges(req, res) {
+    try {
+      const badges = await gamificationEngine.getAllBadgesForUser(req.user.id)
+      res.json(badges)
     } catch (error) { res.status(500).json({ error: error.message }) }
   }
 

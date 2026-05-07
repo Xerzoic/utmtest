@@ -15,8 +15,8 @@ class AutoSaveEngine {
 
   async createRule(userId, ruleType, ruleConfig) {
     const result = await db.query(
-      `INSERT INTO autosave_rules (user_id, rule_type, config, is_active)
-       VALUES ($1, $2, $3, true)
+      `INSERT INTO autosave_rules (id, user_id, rule_type, config, is_active)
+       VALUES (gen_random_uuid(), $1, $2, $3, true)
        RETURNING *`,
       [userId, ruleType, JSON.stringify(ruleConfig)]
     )

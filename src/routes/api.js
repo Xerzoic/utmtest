@@ -42,11 +42,15 @@ router.post('/quests/:questKey/complete', dashboardController.completeQuest)
 
 router.get('/advice', dashboardController.getPersonalisedAdvice)
 
+router.post('/ai/action', dashboardController.handleAIAction)
+router.get('/badges', dashboardController.getAllBadges)
 router.get('/analytics/spending', dashboardController.getSpendingAnalysis)
 
 router.get('/calendar', dashboardController.getCalendarData)
 router.get('/calendar/day', dashboardController.getDayDetail)
 
+router.delete('/expenditures/:expenseId', dashboardController.deleteExpenditure)
+router.delete('/groups/:groupId/leave', dashboardController.leaveGroup)
 router.delete('/goals/:goalId', dashboardController.deleteGoal)
 router.delete('/autosave/rules/:ruleId', dashboardController.deleteAutoSaveRule)
 

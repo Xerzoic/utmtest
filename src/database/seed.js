@@ -74,6 +74,25 @@ async function seed() {
     }
     console.log('  Seeded 3 users')
 
+    const npcs = [
+      { name: 'Siti Bot', email: 'siti.npc@guga.ai', income: 4000 },
+      { name: 'Raj Saver', email: 'raj.npc@guga.ai', income: 5500 },
+      { name: 'Yuki Finance', email: 'yuki.npc@guga.ai', income: 3500 },
+      { name: 'Ali Budget', email: 'ali.npc@guga.ai', income: 5000 },
+      { name: 'Mei Savings', email: 'mei.npc@guga.ai', income: 4500 },
+    ]
+    const npcIds = []
+    for (const n of npcs) {
+      const nid = uid()
+      npcIds.push(nid)
+      await db.query(
+        `INSERT INTO users (id, gxbank_account_id, full_name, email, phone, monthly_income, risk_profile, is_npc)
+         VALUES ($1, $2, $3, $4, $5, $6, 'moderate', 1)`,
+        [nid, 'NPC-' + nid.substring(0, 8), n.name, n.email, '+60' + Math.floor(100000000 + Math.random() * 900000000), n.income]
+      )
+    }
+    console.log('  Seeded 5 NPC users')
+
     const goalIds = {
       emergency: uid(),
       travel: uid(),
@@ -241,7 +260,47 @@ async function seed() {
        'Your food delivery spending is 30% above average. Cooking at home 2 more days/week could save you ~RM120/month.',
        'in_app', 'normal', 0, 0]
     )
-    console.log('  Seeded 3 nudges')
+    const moreNudges = [
+      { type: 'goal_progress', title: 'Emergency Fund Progress', message: 'Your emergency fund is 31% complete (RM4,200/RM13,500). Stay consistent!', priority: 'normal' },
+      { type: 'salary_trigger', title: 'Salary Auto-Save Done', message: 'RM375 (15%) has been moved from your salary to Japan Trip savings.', priority: 'normal' },
+      { type: 'social_nudge', title: 'Group Activity', message: 'Budget Warriors has a new member! Check out the leaderboard.', priority: 'normal' },
+      { type: 'ai_insight', title: 'Weekend Spending Pattern', message: 'You spend 40% more on weekends. Try setting a weekend-only budget of RM100.', priority: 'high' },
+      { type: 'weekly_recap', title: 'Weekly Recap', message: 'This week: saved RM125, spent RM347. Net positive RM125! Streak: 12 days.', priority: 'normal' },
+    ]
+    for (const n of moreNudges) {
+      await db.query(
+        `INSERT INTO nudges (id, user_id, type, title, message, channel, priority, is_read)
+         VALUES ($1, $2, $3, $4, $5, 'push', $6, 0)`,
+        [uid(), u1.id, n.type, n.title, n.message, n.priority]
+      )
+    }
+    console.log('  Seeded 5 more nudges for u1')
+
+    const u2Nudges = [
+      { type: 'goal_progress', title: 'Car Down Payment Progress', message: 'Your car fund is 28% complete (RM8,500/RM30,000). Keep going!', priority: 'normal' },
+      { type: 'weekly_recap', title: 'Weekly Recap', message: 'This week: saved RM85, spent RM520. Try to reduce spending.', priority: 'high' },
+    ]
+    for (const n of u2Nudges) {
+      await db.query(
+        `INSERT INTO nudges (id, user_id, type, title, message, channel, priority, is_read)
+         VALUES ($1, $2, $3, $4, $5, 'push', $6, 0)`,
+        [uid(), u2.id, n.type, n.title, n.message, n.priority]
+      )
+    }
+    console.log('  Seeded 2 nudges for u2')
+
+    const u3Nudges = [
+      { type: 'streak_milestone', title: '21-Day Streak!', message: 'Amazing! You have maintained a 21-day savings streak. Habit formed!', priority: 'normal' },
+      { type: 'goal_progress', title: 'MacBook Pro Progress', message: 'Your MacBook fund is 36% complete (RM3,200/RM9,000). Almost a third!', priority: 'normal' },
+    ]
+    for (const n of u3Nudges) {
+      await db.query(
+        `INSERT INTO nudges (id, user_id, type, title, message, channel, priority, is_read)
+         VALUES ($1, $2, $3, $4, $5, 'push', $6, 0)`,
+        [uid(), u3.id, n.type, n.title, n.message, n.priority]
+      )
+    }
+    console.log('  Seeded 2 nudges for u3')
 
     const dummyGroups = [
       { name: 'Budget Warriors', description: 'Emergency savings clan — we save for rainy days together!', goal_type: 'emergency', target_amount: 5000 },
@@ -263,6 +322,52 @@ async function seed() {
       )
     }
     console.log('  Seeded 5 dummy groups')
+
+    const allGroupIds = await db.query(`SELECT id FROM savings_groups`)
+    const groupIds = allGroupIds.rows.map(r => r.id)
+    for (const nid of npcIds) {
+      const shuffled = [...groupIds].sort(() => Math.random() - 0.5)
+      const assignTo = shuffled.slice(0, 2 + Math.floor(Math.random() * 2))
+      for (const gid of assignTo) {
+        await db.query(
+          `INSERT INTO group_members (group_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING`,
+          [gid, nid]
+        )
+      }
+    }
+    console.log('  Added NPCs to groups')
+
+    for (const gid of groupIds) {
+      const groupMembers = await db.query(
+        `SELECT u.id, u.full_name FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = $1 AND u.is_npc = 1`,
+        [gid]
+      )
+      for (const member of groupMembers.rows) {
+        await db.query(
+          `INSERT INTO group_messages (id, group_id, user_id, message)
+           VALUES (gen_random_uuid(), $1, $2, $3)`,
+          [gid, member.id, 'Hey everyone! Just saved another RM10 today. Small steps! 💪']
+        )
+      }
+    }
+    console.log('  Seeded NPC chat messages')
+
+    for (const nid of npcIds) {
+      const xp = Math.floor(Math.random() * 500) + 100
+      const level = Math.floor(xp / 200) + 1
+      const totalB = Math.min(level, 3)
+      await db.query(
+        `INSERT INTO gamification_profiles (id, user_id, xp, level, total_badges)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
+        [nid, xp, level, totalB]
+      )
+      await db.query(
+        `INSERT INTO savings_streaks (id, user_id, current_streak, longest_streak, last_save_date)
+         VALUES (gen_random_uuid(), $1, $2, $3, date('now'))`,
+        [nid, Math.floor(Math.random() * 10) + 1, Math.floor(Math.random() * 20) + 5]
+      )
+    }
+    console.log('  Seeded NPC gamification profiles and streaks')
 
     console.log('\nDatabase seeded successfully!')
     console.log(`\nDemo user: ${u1.full_name} (${u1.email})`)
