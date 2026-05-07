@@ -27,7 +27,7 @@ module.exports = {
     model: process.env.OPENAI_MODEL || 'gpt-4',
   },
   ilmuAI: {
-    apiKey: process.env.ZAI_API_KEY || 'sk-e70417cf42ecfbe09f3e4110dc343cb26c39833a4d01274d',
+    apiKey: process.env.ZAI_API_KEY || '',
     baseUrl: process.env.ZAI_BASE_URL || 'https://api.ilmu.ai/v1',
     model: process.env.ZAI_MODEL || 'ilmu-glm-5.1',
   },
