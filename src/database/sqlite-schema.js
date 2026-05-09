@@ -171,6 +171,17 @@ CREATE TABLE IF NOT EXISTS budgets (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_unique ON budgets(user_id, category, period_month, period_year);
 
+-- Fixed monthly expenses
+CREATE TABLE IF NOT EXISTS fixed_expenses (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  amount REAL NOT NULL,
+  category TEXT,
+  due_day INTEGER,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
 -- AI insights cache
 CREATE TABLE IF NOT EXISTS ai_insights (
   id TEXT PRIMARY KEY,
@@ -225,6 +236,155 @@ CREATE TABLE IF NOT EXISTS group_messages (
   sent_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_group_messages ON group_messages(group_id, sent_at DESC);
+
+-- Youth resilience extensions
+CREATE TABLE IF NOT EXISTS user_segments (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  segment_type TEXT NOT NULL CHECK (segment_type IN ('student', 'intern', 'first_jobber', 'gig_worker')),
+  confidence REAL DEFAULT 0.7,
+  onboarding_answers TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS resilience_scores (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  score_date TEXT NOT NULL DEFAULT (date('now')),
+  score INTEGER NOT NULL,
+  savings_rate REAL DEFAULT 0,
+  emergency_runway_months REAL DEFAULT 0,
+  debt_pressure REAL DEFAULT 0,
+  spending_volatility REAL DEFAULT 0,
+  consistency REAL DEFAULT 0,
+  movement_reason TEXT,
+  next_best_action TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_resilience_user_date ON resilience_scores(user_id, score_date);
+
+CREATE TABLE IF NOT EXISTS debt_risk_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  risk_type TEXT NOT NULL CHECK (risk_type IN ('bnpl', 'utilization', 'payday_signal', 'cashflow_shortfall')),
+  severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high')),
+  confidence REAL DEFAULT 0.5,
+  trigger_context TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_debt_risks_user_active ON debt_risk_events(user_id, is_active, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS intervention_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  intervention_type TEXT NOT NULL,
+  variant_key TEXT,
+  channel TEXT DEFAULT 'in_app',
+  status TEXT DEFAULT 'delivered',
+  context TEXT,
+  delivered_at TEXT DEFAULT (datetime('now')),
+  viewed_at TEXT,
+  accepted_at TEXT,
+  outcome_d1 REAL,
+  outcome_d7 REAL,
+  outcome_d30 REAL
+);
+CREATE INDEX IF NOT EXISTS idx_intervention_logs_user ON intervention_logs(user_id, delivered_at DESC);
+
+CREATE TABLE IF NOT EXISTS nudge_experiments (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  experiment_key TEXT NOT NULL,
+  variant_key TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  tone TEXT NOT NULL,
+  delivery_hour INTEGER NOT NULL,
+  fatigue_score REAL DEFAULT 0,
+  delivered_count INTEGER DEFAULT 0,
+  accepted_count INTEGER DEFAULT 0,
+  reward_score REAL DEFAULT 0,
+  quiet_hours_start INTEGER DEFAULT 22,
+  quiet_hours_end INTEGER DEFAULT 7,
+  do_not_disturb INTEGER DEFAULT 0,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_nudge_exp_unique ON nudge_experiments(user_id, experiment_key, variant_key);
+
+CREATE TABLE IF NOT EXISTS micro_learning_cards (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  trigger_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  cta_label TEXT,
+  cta_action TEXT,
+  is_completed INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_micro_learning_user ON micro_learning_cards(user_id, is_completed, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS autopilot_profiles (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  mode_key TEXT NOT NULL CHECK (mode_key IN ('exam_month', 'internship_mode', 'first_salary_mode', 'gig_stability_mode')),
+  rule_bundle TEXT NOT NULL,
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS autopilot_settings (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  is_active INTEGER DEFAULT 0,
+  last_month_income REAL DEFAULT 0,
+  emergency_fund_pct REAL DEFAULT 10,
+  savings_goals_pct REAL DEFAULT 10,
+  fixed_bills_monthly REAL DEFAULT 0,
+  emergency_fund_goal REAL DEFAULT 15000,
+  emergency_fund_current REAL DEFAULT 0,
+  daily_spending_total REAL DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS autopilot_daily_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  log_date TEXT NOT NULL,
+  daily_limit REAL NOT NULL,
+  spent REAL DEFAULT 0,
+  rolled_over REAL DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, log_date)
+);
+
+CREATE TABLE IF NOT EXISTS piggy_bank_entries (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  amount REAL NOT NULL,
+  source_txn_id TEXT REFERENCES transactions(id),
+  description TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS commitment_contracts (
+  id TEXT PRIMARY KEY,
+  group_id TEXT REFERENCES savings_groups(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  contract_type TEXT NOT NULL,
+  stake_amount REAL DEFAULT 0,
+  target_value REAL NOT NULL,
+  due_date TEXT,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed', 'failed', 'cancelled')),
+  resolution_note TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_commitment_contracts_group ON commitment_contracts(group_id, status, due_date);
 `
 
 module.exports = { SQL_SCHEMA: SQL_SCHEMA_PG }

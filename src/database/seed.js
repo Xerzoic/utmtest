@@ -45,6 +45,14 @@ async function seed() {
     console.log('Seeding database with SQLite...')
 
     await db.query('DELETE FROM group_commitments')
+    await db.query('DELETE FROM commitment_contracts')
+    await db.query('DELETE FROM autopilot_profiles')
+    await db.query('DELETE FROM micro_learning_cards')
+    await db.query('DELETE FROM nudge_experiments')
+    await db.query('DELETE FROM intervention_logs')
+    await db.query('DELETE FROM debt_risk_events')
+    await db.query('DELETE FROM resilience_scores')
+    await db.query('DELETE FROM user_segments')
     await db.query('DELETE FROM group_members')
     await db.query('DELETE FROM savings_groups')
     await db.query('DELETE FROM ai_insights')
@@ -123,6 +131,19 @@ async function seed() {
     console.log('  Seeded 4 goals')
 
     const txns = [
+      [u1.id, 'TXN-20260401-001', 4500, 'credit', 'salary', 'Tech Solutions Sdn Bhd', 'Monthly salary April', '2026-04-01T00:00:00', 1],
+      [u1.id, 'TXN-20260401-002', 500, 'credit', 'freelance', 'Side Project Client', 'Website design project', '2026-04-15T00:00:00', 0],
+      [u1.id, 'TXN-20260402-001', 25.00, 'debit', 'food', 'Nasi Lemak Stall', 'Breakfast', '2026-04-02T07:30:00', 0],
+      [u1.id, 'TXN-20260403-001', 45.00, 'debit', 'transport', 'Grab', 'Ride to office', '2026-04-03T08:15:00', 0],
+      [u1.id, 'TXN-20260405-001', 120.00, 'debit', 'utilities', 'Tenaga Nasional', 'Electricity bill', '2026-04-05T10:00:00', 0],
+      [u1.id, 'TXN-20260407-001', 18.50, 'debit', 'food', 'Starbucks', 'Coffee & pastry', '2026-04-07T09:00:00', 0],
+      [u1.id, 'TXN-20260410-001', 35.00, 'debit', 'transport', 'Shell', 'Petrol top-up', '2026-04-10T12:00:00', 0],
+      [u1.id, 'TXN-20260412-001', 55.00, 'debit', 'food', 'Foodpanda', 'Dinner delivery', '2026-04-12T19:30:00', 0],
+      [u1.id, 'TXN-20260415-001', 80.00, 'debit', 'shopping', 'Guardian', 'Toiletries', '2026-04-15T14:00:00', 0],
+      [u1.id, 'TXN-20260420-001', 200.00, 'debit', 'bills', 'TM Unifi', 'Internet bill', '2026-04-20T10:00:00', 0],
+      [u1.id, 'TXN-20260422-001', 32.00, 'debit', 'food', 'Mamak Restaurant', 'Dinner with friends', '2026-04-22T20:00:00', 0],
+      [u1.id, 'TXN-20260425-001', 150.00, 'debit', 'shopping', 'Shopee', 'Clothes', '2026-04-25T16:00:00', 0],
+      [u1.id, 'TXN-20260428-001', 42.00, 'debit', 'food', 'Pizza Hut', 'Pizza delivery', '2026-04-28T19:00:00', 0],
       [u1.id, 'TXN-20260501-001', 15.50, 'debit', 'food', 'GrabFood', 'Lunch order - Nasi Lemak', '2026-05-01T12:30:00', 0],
       [u1.id, 'TXN-20260501-002', 2500, 'credit', 'salary', 'Tech Solutions Sdn Bhd', 'Monthly salary', '2026-05-01T00:00:00', 1],
       [u1.id, 'TXN-20260502-001', 45.00, 'debit', 'transport', 'Grab', 'Ride to office', '2026-05-02T08:15:00', 0],
@@ -302,6 +323,43 @@ async function seed() {
     }
     console.log('  Seeded 2 nudges for u3')
 
+    await db.query(
+      `INSERT INTO user_segments (id, user_id, segment_type, confidence, onboarding_answers)
+       VALUES (gen_random_uuid(), $1, 'student', 0.9, $2)`,
+      [u1.id, JSON.stringify({ track: 'student', income_type: 'allowance', goal_priority: 'emergency' })]
+    )
+    await db.query(
+      `INSERT INTO autopilot_profiles (id, user_id, mode_key, rule_bundle, is_active)
+       VALUES (gen_random_uuid(), $1, 'exam_month', $2, 1)`,
+      [u1.id, JSON.stringify({ weekly_allowance_cap: 150, emergency_micro_save: 10, roundup_multiplier: 1.0 })]
+    )
+    await db.query(
+      `INSERT INTO resilience_scores (id, user_id, score_date, score, savings_rate, emergency_runway_months, debt_pressure, spending_volatility, consistency, movement_reason, next_best_action)
+       VALUES (gen_random_uuid(), $1, date('now'), 68, 18.5, 1.8, 25, 34, 60, 'Savings improved from last week', 'Enable debt guardrail for food and shopping')`,
+      [u1.id]
+    )
+    await db.query(
+      `INSERT INTO debt_risk_events (id, user_id, risk_type, severity, confidence, trigger_context, is_active)
+       VALUES (gen_random_uuid(), $1, 'cashflow_shortfall', 'medium', 0.71, $2, 1)`,
+      [u1.id, JSON.stringify({ projected_spend: 4200, salary: 3800 })]
+    )
+    await db.query(
+      `INSERT INTO intervention_logs (id, user_id, intervention_type, variant_key, channel, status, context, delivered_at, viewed_at, accepted_at, outcome_d1, outcome_d7, outcome_d30)
+       VALUES (gen_random_uuid(), $1, 'overspend_nudge', 'supportive_push_9pm', 'push', 'accepted', $2, datetime('now', '-8 days'), datetime('now', '-8 days'), datetime('now', '-8 days'), 42, 210, 95)`,
+      [u1.id, JSON.stringify({ category: 'food' })]
+    )
+    await db.query(
+      `INSERT INTO nudge_experiments (id, user_id, experiment_key, variant_key, channel, tone, delivery_hour, delivered_count, accepted_count, reward_score)
+       VALUES (gen_random_uuid(), $1, 'overspend', 'supportive_push_9pm', 'push', 'supportive', 21, 12, 5, 41.6)`,
+      [u1.id]
+    )
+    await db.query(
+      `INSERT INTO micro_learning_cards (id, user_id, trigger_type, title, content, cta_label, cta_action, is_completed)
+       VALUES (gen_random_uuid(), $1, 'overspend_food', 'Food Spend Reset', 'Your food spending exceeded plan by RM42. Use a 48-hour reset and cap daily food spend at RM20.', 'Apply RM20/day cap', 'set_food_cap_20', 0)`,
+      [u1.id]
+    )
+    console.log('  Seeded resilience layer records')
+
     const dummyGroups = [
       { name: 'Budget Warriors', description: 'Emergency savings clan — we save for rainy days together!', goal_type: 'emergency', target_amount: 5000 },
       { name: 'RM10K Racers', description: 'Race to RM10K in savings. First one there buys coffee!', goal_type: 'other', target_amount: 10000 },
@@ -351,6 +409,15 @@ async function seed() {
       }
     }
     console.log('  Seeded NPC chat messages')
+
+    if (groupIds.length > 0) {
+      await db.query(
+        `INSERT INTO commitment_contracts (id, group_id, user_id, contract_type, target_value, stake_amount, due_date, status)
+         VALUES (gen_random_uuid(), $1, $2, 'weekly_save', 50, 5, date('now', '+7 days'), 'active')`,
+        [groupIds[0], u1.id]
+      )
+      console.log('  Seeded commitment contract sample')
+    }
 
     for (const nid of npcIds) {
       const xp = Math.floor(Math.random() * 500) + 100

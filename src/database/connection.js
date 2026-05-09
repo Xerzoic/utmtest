@@ -40,14 +40,21 @@ function toSQLite(sql) {
   // Handle EXTRACT(DAY FROM ...) for other date expressions
   result = result.replace(/EXTRACT\(DAY FROM ([^)]+)\)/g, "(CAST(julianday($1) AS INTEGER))")
 
+  // Convert to Malaysia time (UTC+8)
+  result = result.replace(/datetime\('now'\)/g, "datetime('now', '+8 hours')")
+  result = result.replace(/date\('now'\)/g, "date('now', '+8 hours')")
+
   return result
 }
+
+function sanitize(v) { return v === undefined ? null : v }
 
 function query(sql, params = []) {
   const converted = toSQLite(sql)
   if (process.env.NODE_ENV === 'development') {
     console.log('SQL:', converted, 'Params:', params)
   }
+  params = params.map(sanitize)
   const trimmed = converted.trim().toUpperCase()
 
   if (trimmed.startsWith('SELECT') || trimmed.startsWith('WITH')) {

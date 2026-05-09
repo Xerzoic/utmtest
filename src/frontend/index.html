@@ -11,44 +11,61 @@
   <div id="app">
     <div id="authScreen" class="auth-screen">
       <div class="auth-container">
-        <div class="auth-logo">
-          <span class="logo-icon">GG</span>
-          <span class="logo-text">Save</span>
-        </div>
-        <h1 class="auth-title">Welcome to GuGa Saves</h1>
-        <p class="auth-subtitle">Smart savings powered by behavioural finance</p>
-
-        <div id="loginForm" class="auth-form">
-          <h2>Login</h2>
-          <div class="form-group">
-            <label>Email</label>
-            <input type="email" id="loginEmail" placeholder="Enter your email" value="aisha.rahman@email.com">
+        <div class="auth-showcase">
+          <div class="auth-logo">
+            <span class="logo-icon">GG</span>
+            <span class="logo-text">Save</span>
           </div>
-          <button class="btn-primary full-width" onclick="login()">Login</button>
-          <p class="auth-switch">Don't have an account? <a href="#" onclick="showRegister()">Register</a></p>
-          <button class="btn-demo full-width" onclick="demoLogin()">Try Demo Mode</button>
+          <h1 class="auth-title">Build Better Money Habits</h1>
+          <p class="auth-subtitle">Automated savings, smart nudges, and resilient financial routines for students and early-career users.</p>
+          <div class="auth-benefits">
+            <p>✓ Debt-risk early warning</p>
+            <p>✓ AI-guided budgeting actions</p>
+            <p>✓ Savings streaks + rewards</p>
+          </div>
         </div>
 
-        <div id="registerForm" class="auth-form" style="display:none">
-          <h2>Register</h2>
-          <div class="form-group">
-            <label>Full Name</label>
-            <input type="text" id="regName" placeholder="Your full name">
+        <div class="auth-panel">
+          <div id="loginForm" class="auth-form">
+            <h2>Welcome back</h2>
+            <p class="auth-helper">Sign in to continue your resilience journey</p>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="loginEmail" placeholder="Enter your email" value="aisha.rahman@email.com">
+            </div>
+            <button class="btn-primary full-width" onclick="login()">Login</button>
+            <div class="quick-access">
+              <span>Quick login:</span>
+              <button class="quick-chip" onclick="document.getElementById('loginEmail').value='aisha.rahman@email.com'; login()">Aisha</button>
+              <button class="quick-chip" onclick="document.getElementById('loginEmail').value='hakim@email.com'; login()">Hakim</button>
+              <button class="quick-chip" onclick="document.getElementById('loginEmail').value='weiling@email.com'; login()">Wei Ling</button>
+            </div>
+            <p class="auth-switch">Don't have an account? <a href="#" onclick="showRegister()">Create account</a></p>
+            <button class="btn-demo full-width" onclick="demoLogin()">Try Demo Mode</button>
           </div>
-          <div class="form-group">
-            <label>Email</label>
-            <input type="email" id="regEmail" placeholder="your@email.com">
+
+          <div id="registerForm" class="auth-form" style="display:none">
+            <h2>Create your account</h2>
+            <p class="auth-helper">Set up your profile in under a minute</p>
+            <div class="form-group">
+              <label>Full Name</label>
+              <input type="text" id="regName" placeholder="Your full name">
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="regEmail" placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+              <label>Phone</label>
+              <input type="tel" id="regPhone" placeholder="+60123456789">
+            </div>
+            <div class="form-group">
+              <label>Monthly Income (RM)</label>
+              <input type="number" id="regIncome" placeholder="5000">
+            </div>
+            <button class="btn-primary full-width" onclick="register()">Create account</button>
+            <p class="auth-switch">Already have an account? <a href="#" onclick="showLogin()">Back to login</a></p>
           </div>
-          <div class="form-group">
-            <label>Phone</label>
-            <input type="tel" id="regPhone" placeholder="+60123456789">
-          </div>
-          <div class="form-group">
-            <label>Monthly Income (RM)</label>
-            <input type="number" id="regIncome" placeholder="5000">
-          </div>
-          <button class="btn-primary full-width" onclick="register()">Register</button>
-          <p class="auth-switch">Already have an account? <a href="#" onclick="showLogin()">Login</a></p>
         </div>
       </div>
     </div>
@@ -75,13 +92,17 @@
           <span class="nav-icon">🏠</span>
           <span class="nav-label">Home</span>
         </button>
+        <button class="nav-item" onclick="showTab('savings')">
+          <span class="nav-icon">💰</span>
+          <span class="nav-label">Savings</span>
+        </button>
         <button class="nav-item" onclick="showTab('goals')">
           <span class="nav-icon">🎯</span>
           <span class="nav-label">Goals</span>
         </button>
         <button class="nav-item" onclick="showTab('insights')">
-          <span class="nav-icon">🧠</span>
-          <span class="nav-label">Insights</span>
+          <span class="nav-icon">🏆</span>
+          <span class="nav-label">Achievements</span>
         </button>
         <button class="nav-item" onclick="showTab('autosave')">
           <span class="nav-icon">⚡</span>
@@ -100,66 +121,18 @@
               <p class="greeting" id="greetingTime">Good morning,</p>
               <h1 class="user-name" id="heroName">...</h1>
             </div>
-            <div class="hero-stats">
-              <div class="hero-stat">
-                <p class="stat-label">Total Saved</p>
-                <p class="stat-value" id="totalSavings">RM 0</p>
-              </div>
-              <div class="hero-stat">
-                <p class="stat-label">This Month</p>
-                <p class="stat-value stat-positive" id="monthlySpending">RM 0</p>
-              </div>
-            </div>
           </section>
 
           <section class="streak-card">
             <div class="streak-visual">
               <div class="streak-fire">🔥</div>
               <div class="streak-info">
-                <p class="streak-count"><span id="streakCount">0</span> day streak</p>
-                <p class="streak-best">Best: <span id="bestStreak">0</span> days</p>
+                <p class="streak-count"><span id="savingsStreakCount">0</span> day streak</p>
+                <p class="streak-best">Best: <span id="savingsBestStreak">0</span> days</p>
               </div>
             </div>
-            <div class="streak-calendar" id="streakCalendar"></div>
+            <div class="streak-calendar" id="savingsStreakCalendar"></div>
           </section>
-
-          <section class="calendar-section">
-            <div class="calendar-header">
-              <button onclick="prevMonth()">◀</button>
-              <h2 id="calendarMonth">May 2026</h2>
-              <button onclick="nextMonth()">▶</button>
-            </div>
-            <div class="calendar-grid" id="calendarGrid"></div>
-          </section>
-
-          <section class="expenses-section" id="todayExpensesSection">
-            <div class="expenses-header">
-              <h2 class="section-title">Today's Expenses</h2>
-              <span class="expenses-total" id="todayExpenseTotal">RM 0</span>
-            </div>
-            <div id="todayExpensesList" class="expense-list">
-              <p class="empty-state">No expenses logged today</p>
-            </div>
-          </section>
-
-          <section class="spending-section">
-            <h2 class="section-title">Spending Breakdown</h2>
-            <div id="spendingChart" class="spending-chart">
-              <p class="empty-state">No spending data yet</p>
-            </div>
-          </section>
-
-          <section class="budgets-section">
-            <div class="budgets-header">
-              <h2 class="section-title">Monthly Budgets</h2>
-              <button class="btn-secondary btn-sm" onclick="aiSuggestBudgets()">AI Suggest</button>
-            </div>
-            <div id="budgetList" class="budget-list">
-              <p class="empty-state">No budgets set</p>
-            </div>
-          </section>
-
-          <section class="gamification-section" id="gamificationProfile"></section>
 
           <section class="nudges-section">
             <h2 class="section-title">Today's Nudges</h2>
@@ -170,23 +143,11 @@
 
           <section class="quick-actions">
             <h2 class="section-title">Quick Actions</h2>
-            <h3 class="action-category">💰 Money</h3>
             <div class="action-grid">
-              <button class="action-btn action-btn-highlight" onclick="openExpenseModal()" id="logExpenseBtn">
-                <span class="action-icon">💸</span>
-                <span class="action-label">Log Expense</span>
+              <button class="action-btn" onclick="showTab('savings')">
+                <span class="action-icon">💰</span>
+                <span class="action-label">Cash Flow</span>
               </button>
-              <button class="action-btn" onclick="openRoundUpPanel()" id="roundUpQuickBtn">
-                <span class="action-icon">🪙</span>
-                <span class="action-label">Round-Up</span>
-              </button>
-              <button class="action-btn" onclick="openNewGoalModal()">
-                <span class="action-icon">🎯</span>
-                <span class="action-label">New Goal</span>
-              </button>
-            </div>
-            <h3 class="action-category">📊 Insights</h3>
-            <div class="action-grid">
               <button class="action-btn action-btn-advisor" onclick="openAdvisor()" id="advisorBtn">
                 <span class="action-icon">💡</span>
                 <span class="action-label">My Advisor</span>
@@ -199,19 +160,84 @@
                 <span class="action-icon">🤖</span>
                 <span class="action-label">AI Chat</span>
               </button>
-            </div>
-            <h3 class="action-category">👥 Social</h3>
-            <div class="action-grid">
               <button class="action-btn" onclick="showTab('social')">
                 <span class="action-icon">👥</span>
-                <span class="action-label">Join Group</span>
-              </button>
-              <button class="action-btn" onclick="showTab('social')">
-                <span class="action-icon">⚔️</span>
-                <span class="action-label">Daily Quests</span>
+                <span class="action-label">Social</span>
               </button>
             </div>
           </section>
+        </div>
+
+        <div id="savingsTab" class="tab-content">
+          <section class="hero-card">
+            <div class="hero-stats">
+              <div class="hero-stat">
+                <p class="stat-label">Account Balance</p>
+                <div class="stat-value-wrapper">
+                  <p class="stat-value" id="savingsAccountBalance">RM 0</p>
+                  <button class="eye-toggle" id="eyeToggle" onclick="toggleBalanceVisibility()">
+                    <span id="eyeIcon">👁️</span>
+                  </button>
+                </div>
+                <div class="hero-actions">
+                  <button class="action-btn-sm" onclick="openAddMoneyModal()">+ Add Money</button>
+                  <button class="action-btn-sm action-btn-secondary" onclick="openTransactionModal()">📋 Transactions</button>
+                </div>
+                <div class="money-actions-bar">
+                  <button class="money-action" onclick="openSendMoneyModal()">
+                    <span class="money-action-icon">💸</span>
+                    <span class="money-action-label">Send</span>
+                  </button>
+                  <button class="money-action" onclick="alert('Receive Money — coming soon')">
+                    <span class="money-action-icon">📥</span>
+                    <span class="money-action-label">Receive</span>
+                  </button>
+                  <button class="money-action" onclick="openFixedExpensesModal()">
+                    <span class="money-action-icon">📋</span>
+                    <span class="money-action-label">Fixed</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="expenses-section" id="todayExpensesSection">
+            <div class="expenses-header">
+              <h2 class="section-title">Today's Expenses</h2>
+              <span class="expenses-total" id="todayExpenseTotal">RM 0</span>
+            </div>
+            <div id="todayExpensesList" class="expense-list">
+              <p class="empty-state">No expenses logged today</p>
+            </div>
+          </section>
+
+          <section class="calendar-section">
+            <div class="calendar-header">
+              <button onclick="prevMonthSavings()">◀</button>
+              <h2 id="savingsCalendarMonth">May 2026</h2>
+              <button onclick="nextMonthSavings()">▶</button>
+            </div>
+            <div class="calendar-grid" id="savingsCalendarGrid"></div>
+            <div class="calendar-income" id="calendarLastMonthIncome">Last month income: RM 0.00</div>
+          </section>
+
+          <section class="spending-section">
+            <h2 class="section-title">Spending Breakdown</h2>
+            <div id="savingsSpendingChart" class="spending-chart">
+              <p class="empty-state">No spending data yet</p>
+            </div>
+          </section>
+
+          <section class="budgets-section">
+            <div class="budgets-header">
+              <h2 class="section-title">Monthly Budgets</h2>
+              <button class="btn-secondary btn-sm" onclick="aiSuggestBudgets()">AI Suggest</button>
+            </div>
+            <div id="savingsBudgetList" class="budget-list">
+              <p class="empty-state">No budgets set</p>
+            </div>
+          </section>
+
         </div>
 
         <div id="goalsTab" class="tab-content">
@@ -222,9 +248,102 @@
           <div id="goalsList" class="goals-list">
             <p class="empty-state">No goals yet. Create your first savings goal!</p>
           </div>
+          <section class="quick-actions">
+            <h2 class="section-title">Cash Flow</h2>
+            <div class="action-grid">
+              <button class="action-btn action-btn-highlight" onclick="openExpenseModal()">
+                <span class="action-icon">💸</span>
+                <span class="action-label">Log Expense</span>
+              </button>
+              <button class="action-btn" onclick="openRoundUpPanel()">
+                <span class="action-icon">🪙</span>
+                <span class="action-label">Round-Up</span>
+              </button>
+              <button class="action-btn" onclick="openNewGoalModal()">
+                <span class="action-icon">🎯</span>
+                <span class="action-label">New Goal</span>
+              </button>
+            </div>
+          </section>
+          <section class="autopilot-section" id="autopilotSection">
+            <div class="autopilot-header">
+              <h2 class="section-title">🤖 Autopilot Savings Plan</h2>
+              <button class="btn-secondary btn-sm" id="autopilotToggleBtn" onclick="toggleAutopilot()">Set Up</button>
+            </div>
+            <div id="autopilotContent">
+              <p class="empty-state">Set up your Autopilot Savings Plan to automatically manage your daily spending, savings partitioning, and round-ups.</p>
+              <button class="btn-primary full-width" onclick="openAutopilotSetup()">Set Up Autopilot</button>
+            </div>
+          </section>
         </div>
 
         <div id="insightsTab" class="tab-content">
+          <div class="tab-header">
+            <h2>Achievements & Progress</h2>
+            <button class="btn-secondary" onclick="loadAchievements()">Refresh</button>
+          </div>
+          <section class="gamification-section" id="gamificationProfile"></section>
+
+          <section class="insights-section">
+            <div class="tab-header">
+              <h2>Resilience Score</h2>
+              <button class="btn-secondary btn-sm" onclick="refreshResilience()">Refresh</button>
+            </div>
+            <div id="resilienceCard" class="insight-card">
+              <p class="empty-state">Score not calculated yet</p>
+            </div>
+          </section>
+
+          <section class="insights-section">
+            <div class="tab-header">
+              <h2>Debt Trap Early Warning</h2>
+              <button class="btn-secondary btn-sm" onclick="runDebtRiskScan()">Scan</button>
+            </div>
+            <div id="debtRiskCard" class="insight-card">
+              <p class="empty-state">No debt risk scan run yet</p>
+            </div>
+          </section>
+
+          <section class="insights-section">
+            <div class="tab-header">
+              <h2>Adaptive Nudge Engine</h2>
+              <button class="btn-secondary btn-sm" onclick="loadAdaptiveNudges()">Load Policy</button>
+            </div>
+            <div id="adaptiveNudgeCard" class="insight-card">
+              <p class="empty-state">No policy loaded</p>
+            </div>
+          </section>
+
+          <section class="insights-section">
+            <div class="tab-header">
+              <h2>Intervention Outcomes</h2>
+              <button class="btn-secondary btn-sm" onclick="loadInterventionOutcomes()">Refresh</button>
+            </div>
+            <div id="interventionOutcomeCard" class="insight-card">
+              <p class="empty-state">No outcome data yet</p>
+            </div>
+          </section>
+
+          <section class="insights-section">
+            <div class="tab-header">
+              <h2>Micro-Learning</h2>
+              <button class="btn-secondary btn-sm" onclick="loadMicroLearning()">Load Cards</button>
+            </div>
+            <div id="microLearningList" class="nudge-list">
+              <p class="empty-state">No cards yet</p>
+            </div>
+          </section>
+
+          <section class="insights-section">
+            <div class="tab-header">
+              <h2>GXBank Integration Story</h2>
+              <button class="btn-secondary btn-sm" onclick="loadGXBankStory()">Show</button>
+            </div>
+            <div id="gxbankStoryCard" class="insight-card">
+              <p class="empty-state">Load to view capability mapping</p>
+            </div>
+          </section>
+
           <div class="tab-header">
             <h2>AI Insights</h2>
             <button class="btn-secondary" onclick="refreshInsights()">Refresh</button>
@@ -266,6 +385,14 @@
           <section class="discover-section">
             <h2 class="section-title">Discover Clans</h2>
             <div id="discoverGroupsList" class="groups-grid"></div>
+          </section>
+
+          <section class="discover-section">
+            <div class="tab-header">
+              <h2>Commitment Contracts</h2>
+              <button class="btn-secondary btn-sm" onclick="createSampleCommitment()">+ Add Contract</button>
+            </div>
+            <div id="contractList" class="groups-grid"></div>
           </section>
         </div>
 
@@ -514,9 +641,208 @@
           <button onclick="sendAIChat()">Send</button>
         </div>
       </div>
+
+      <div id="onboardingOverlay" class="modal">
+        <div class="modal-content">
+          <h2>Personalize Autopilot</h2>
+          <div class="form-group">
+            <label>Current track</label>
+            <select id="onbTrack">
+              <option value="student">Student</option>
+              <option value="intern">Intern</option>
+              <option value="first_jobber">First Jobber</option>
+              <option value="gig_worker">Gig Worker</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Income type</label>
+            <select id="onbIncomeType">
+              <option value="allowance">Allowance</option>
+              <option value="stipend">Stipend</option>
+              <option value="salary">Salary</option>
+              <option value="gig">Gig/Freelance</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Priority goal</label>
+            <select id="onbGoalPriority">
+              <option value="emergency">Emergency fund</option>
+              <option value="debt_control">Debt control</option>
+              <option value="travel">Travel</option>
+              <option value="education">Education</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeOnboardingPlanner()">Cancel</button>
+            <button type="button" class="btn-primary" onclick="saveOnboardingSegment()">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="addMoneyModal" class="modal">
+        <div class="modal-content">
+          <h2>💳 Add Money</h2>
+          <div id="addMoneyMethodStep">
+            <p class="add-money-desc">Select a method to add money:</p>
+            <div class="method-options">
+              <div class="method-option" onclick="selectAddMethod('Online Banking')">
+                <span class="method-icon">🏦</span>
+                <div class="method-info">
+                  <p class="method-name">Online Banking</p>
+                  <p class="method-desc">FPX / DuitNow Transfer</p>
+                </div>
+              </div>
+              <div class="method-option" onclick="selectAddMethod('Debit / Credit Card')">
+                <span class="method-icon">💳</span>
+                <div class="method-info">
+                  <p class="method-name">Debit / Credit Card</p>
+                  <p class="method-desc">Visa, Mastercard, Amex</p>
+                </div>
+              </div>
+              <div class="method-option" onclick="selectAddMethod('E-Wallet')">
+                <span class="method-icon">📱</span>
+                <div class="method-info">
+                  <p class="method-name">E-Wallet</p>
+                  <p class="method-desc">Touch 'n Go, GrabPay, ShopeePay</p>
+                </div>
+              </div>
+              <div class="method-option" onclick="selectAddMethod('Cash Deposit')">
+                <span class="method-icon">🏧</span>
+                <div class="method-info">
+                  <p class="method-name">Cash Deposit</p>
+                  <p class="method-desc">Deposit at any partner bank ATM</p>
+                </div>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn-secondary" onclick="closeModal('addMoneyModal')">Cancel</button>
+            </div>
+          </div>
+          <div id="addMoneyAmountStep" style="display:none">
+            <p class="add-money-desc" id="addMoneyMethodLabel">Add money via <strong>Online Banking</strong></p>
+            <div class="add-money-form">
+              <label>Amount (RM)</label>
+              <input type="number" id="addMoneyAmount" placeholder="0.00" step="0.01" min="0.01">
+              <label>Note (optional)</label>
+              <input type="text" id="addMoneyNote" placeholder="e.g. Salary, allowance..." maxlength="100">
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn-secondary" onclick="backAddMethod()">← Back</button>
+              <button type="button" class="btn-primary" onclick="handleAddMoney()">Add Money</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="transactionModal" class="modal">
+        <div class="modal-content modal-content-wide">
+          <h2>📋 Transaction History</h2>
+          <div id="transactionList" class="transaction-list">
+            <p class="empty-state">Loading...</p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeModal('transactionModal')">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="sendMoneyModal" class="modal">
+        <div class="modal-content">
+          <h2>💸 Send Money</h2>
+          <div class="send-tabs">
+            <button class="send-tab active" id="sendPhoneTab" onclick="switchSendTab('phone')">📱 Phone Number</button>
+            <button class="send-tab" id="sendQrTab" onclick="switchSendTab('qr')">📷 Scan QR</button>
+          </div>
+          <div id="sendPhoneForm" class="send-form">
+            <label>Phone Number</label>
+            <input type="tel" id="sendPhone" placeholder="e.g. +60123456789">
+          </div>
+          <div id="sendQrForm" class="send-form" style="display:none">
+            <div class="qr-placeholder" id="qrScanner">
+              <video id="qrVideo" style="display:none" autoplay playsinline></video>
+              <canvas id="qrCanvas" style="display:none"></canvas>
+              <div class="qr-preview">
+                <span class="qr-icon">📷</span>
+                <p class="qr-hint">Point your camera at a QR code</p>
+                <button type="button" class="btn-secondary" onclick="startQrScanner()">Open Camera</button>
+                <p class="qr-result" id="qrResult"></p>
+              </div>
+            </div>
+          </div>
+          <div class="send-form">
+            <label>Amount (RM)</label>
+            <input type="number" id="sendAmount" placeholder="0.00" step="0.01" min="0.01">
+            <label>Note (optional)</label>
+            <input type="text" id="sendNote" placeholder="e.g. Lunch split..." maxlength="100">
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeModal('sendMoneyModal')">Cancel</button>
+            <button type="button" class="btn-primary" onclick="handleSendMoney()">Send</button>
+          </div>
+        </div>
+      <div id="fixedExpensesModal" class="modal">
+        <div class="modal-content modal-content-wide">
+          <h2>📋 Fixed Expenses</h2>
+          <p class="add-money-desc">Manage your monthly fixed expenses</p>
+          <div id="fixedExpensesList" class="fixed-expenses-list"></div>
+          <div class="fixed-expenses-add-form">
+            <h3>Add New</h3>
+            <div class="fixed-form-row">
+              <input type="text" id="fixedName" placeholder="e.g. Rent">
+              <input type="number" id="fixedAmount" placeholder="Amount" step="0.01" min="0.01">
+            </div>
+            <div class="fixed-form-row">
+              <select id="fixedCategory">
+                <option value="bills">Bills & Utilities</option>
+                <option value="housing">Housing</option>
+                <option value="transport">Transport</option>
+                <option value="subscription">Subscription</option>
+                <option value="insurance">Insurance</option>
+                <option value="other">Other</option>
+              </select>
+              <input type="number" id="fixedDueDay" placeholder="Due day (1-31)" min="1" max="31">
+            </div>
+            <button class="btn-primary full-width" onclick="handleAddFixedExpense()">+ Add Fixed Expense</button>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeModal('fixedExpensesModal')">Close</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
+  <div id="autopilotSetupModal" class="modal">
+    <div class="modal-content">
+      <h2>🤖 Autopilot Setup</h2>
+      <p class="add-money-desc">Configure your automated savings plan based on last month's income.</p>
+      <div class="add-money-form">
+        <label>Last Month's Total Income (RM) <small style="color:var(--text-muted)">Auto from your calendar</small></label>
+        <input type="number" id="apIncome" readonly style="background:var(--bg-card);color:var(--text-secondary);cursor:not-allowed" step="0.01" min="0">
+        <label>Emergency Fund (%) <small style="color:var(--text-muted)">Default 10%</small></label>
+        <input type="number" id="apEmergencyPct" placeholder="10" min="0" max="100" value="10">
+        <label>Savings Goals (%) <small style="color:var(--text-muted)">Default 10%</small></label>
+        <input type="number" id="apSavingsPct" placeholder="10" min="0" max="100" value="10">
+        <label>Total Fixed Bills Per Month (RM) <small style="color:var(--text-muted)">Auto-calculated from your fixed expenses</small></label>
+        <input type="number" id="apBills" readonly style="background:var(--bg-card);color:var(--text-secondary);cursor:not-allowed" step="0.01" min="0">
+      </div>
+      <div id="apPreview" class="autopilot-preview" style="display:none">
+        <div class="ap-preview-row"><span>Last Month Income</span><span class="ap-income" id="apPreviewIncome">RM 0</span></div>
+        <div class="ap-preview-divider"></div>
+        <div class="ap-preview-row"><span>🔒 Emergency Fund</span><span class="ap-emergency" id="apPreviewEmergency">RM 0</span></div>
+        <div class="ap-preview-row"><span>🎯 Savings Goals</span><span class="ap-goals" id="apPreviewGoals">RM 0</span></div>
+        <div class="ap-preview-row"><span>📋 Fixed Bills</span><span class="ap-bills" id="apPreviewBills">RM 0</span></div>
+        <div class="ap-preview-divider"></div>
+        <div class="ap-preview-row ap-daily-row"><span>💰 Daily Spending Pool</span><span class="ap-daily" id="apPreviewDaily">RM 0</span></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="closeModal('autopilotSetupModal')">Cancel</button>
+        <button type="button" class="btn-primary" onclick="saveAutopilotSetup()">Activate Autopilot</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="/scripts/app.js"></script>
 </body>
 </html>

@@ -3,6 +3,13 @@ const aiEngine = require('../services/AIEngine')
 const nudgeEngine = require('../services/NudgeEngine')
 const autoSaveEngine = require('../services/AutoSaveEngine')
 const gamificationEngine = require('../services/GamificationEngine')
+const resilienceEngine = require('../services/ResilienceEngine')
+
+function myDate(offsetDays) {
+  var d = new Date();
+  if (offsetDays) d.setDate(d.getDate() + offsetDays);
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
+}
 
 class DashboardController {
   async getDashboard(req, res) {
@@ -140,7 +147,7 @@ class DashboardController {
         params.push(category)
       }
 
-      query += ` ORDER BY transaction_date DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
+      query += ` ORDER BY transaction_date DESC, created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
       params.push(parseInt(limit), parseInt(offset))
 
       const result = await db.query(query, params)
@@ -157,13 +164,21 @@ class DashboardController {
 
       const txnCategory = category || await aiEngine.categoriseTransaction({ merchant, description })
 
-      const result = await db.query(
+      var txnDate = transaction_date ? String(transaction_date) : myDate()
+      var result = await db.query(
         `INSERT INTO transactions (user_id, gxbank_txn_id, amount, type, category, merchant, description, transaction_date, is_recurring)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-        [userId, `TXN-${Date.now()}`, amount, type, txnCategory, merchant, description, transaction_date || new Date(), is_recurring || false]
+        [userId, 'TXN-' + Date.now(), amount, type, txnCategory, merchant, description, txnDate, is_recurring ? 1 : 0]
       )
 
       const txn = result.rows[0]
+
+      var goal = await db.query(`SELECT id, current_amount FROM goals WHERE user_id = $1 AND is_active = true ORDER BY priority LIMIT 1`, [userId])
+      if (goal.rows.length > 0) {
+        var g = goal.rows[0]
+        var newAmount = type === 'credit' ? parseFloat(g.current_amount) + parseFloat(amount) : Math.max(0, parseFloat(g.current_amount) - parseFloat(amount))
+        await db.query(`UPDATE goals SET current_amount = $1, updated_at = datetime('now') WHERE id = $2`, [newAmount, g.id])
+      }
 
       if (type === 'debit') {
         await autoSaveEngine.executeRoundUp(txn.id)
@@ -460,9 +475,9 @@ class DashboardController {
       const txn = txnResult.rows[0]
       await autoSaveEngine.executeRoundUp(txn.id)
 
-      const now = new Date()
-      const month = now.getMonth() + 1
-      const year = now.getFullYear()
+      var parts = myDate().split('-')
+      var month = parseInt(parts[1])
+      var year = parseInt(parts[0])
       const existingBudget = await db.query(
         `SELECT id FROM budgets WHERE user_id = $1 AND category = $2 AND period_month = $3 AND period_year = $4`,
         [userId, category, month, year]
@@ -503,21 +518,25 @@ class DashboardController {
   async getDailyExpenditures(req, res) {
     try {
       const userId = req.user.id
-      const date = req.query.date || new Date().toISOString().split('T')[0]
+      const date = req.query.date || myDate()
 
       const expenditures = await db.query(
         `SELECT * FROM daily_expenditures WHERE user_id = $1 AND expenditure_date = $2 ORDER BY created_at DESC`,
         [userId, date]
       )
 
-      const totalResult = await db.query(
+      const expTotal = await db.query(
         `SELECT COALESCE(SUM(amount), 0) as total FROM daily_expenditures WHERE user_id = $1 AND expenditure_date = $2`,
+        [userId, date]
+      )
+      const txnTotal = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE user_id = $1 AND type = 'debit' AND date(transaction_date) = $2`,
         [userId, date]
       )
 
       res.json({
         expenditures: expenditures.rows,
-        totalToday: parseFloat(totalResult.rows[0].total)
+        totalToday: parseFloat(expTotal.rows[0].total) + parseFloat(txnTotal.rows[0].total)
       })
     } catch (error) {
       res.status(500).json({ error: error.message })
@@ -568,6 +587,17 @@ class DashboardController {
          GROUP BY transaction_date ORDER BY transaction_date`,
         [userId, month]
       )
+      const parts = month.split('-')
+      let lastMonthYear = parseInt(parts[0])
+      let lastMonthNum = parseInt(parts[1]) - 1
+      if (lastMonthNum === 0) { lastMonthNum = 12; lastMonthYear-- }
+      const lastMonthStr = lastMonthYear + '-' + (lastMonthNum < 10 ? '0' : '') + lastMonthNum
+      const incomeResult = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE user_id = $1 AND type = 'credit' AND strftime('%Y-%m', transaction_date) = $2`,
+        [userId, lastMonthStr]
+      )
+      const lastMonthIncome = parseFloat(incomeResult.rows[0]?.total || 0)
+
       const result = days.rows.map(function(d) {
         const spent = parseFloat(d.spent)
         let status = 'green'
@@ -575,7 +605,7 @@ class DashboardController {
         else if (spent > dailyBudget * 0.5) status = 'yellow'
         return { date: d.date, spent, saved: parseFloat(d.saved), status }
       })
-      res.json({ days: result, dailyBudget })
+      res.json({ days: result, dailyBudget, lastMonthIncome })
     } catch (error) { res.status(500).json({ error: error.message }) }
   }
 
@@ -672,9 +702,9 @@ class DashboardController {
       const userId = req.user.id
       const { action, category, limit, name, amount } = req.body
       if (action === 'create_budget') {
-        const now = new Date()
-        const month = now.getMonth() + 1
-        const year = now.getFullYear()
+        var parts = myDate().split('-')
+        var month = parseInt(parts[1])
+        var year = parseInt(parts[0])
         await db.query(
           `INSERT INTO budgets (id, user_id, category, monthly_limit, current_spent, period_month, period_year)
            VALUES (gen_random_uuid(), $1, $2, $3, 0, $4, $5)
@@ -764,6 +794,386 @@ class DashboardController {
       const cats = Object.keys(analysis.categoryBreakdown)
       res.json(cats.map(c => ({ category: c, limit: Math.round(income * 0.15), reason: 'Default 15% allocation' })))
     }
+  }
+
+  async upsertOnboardingSegment(req, res) {
+    try {
+      const userId = req.user.id
+      const segment = await resilienceEngine.upsertUserSegment(userId, req.body || {})
+      res.json(segment)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async getResilienceScore(req, res) {
+    try {
+      const userId = req.user.id
+      const score = await resilienceEngine.computeResilienceScore(userId)
+      res.json(score)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async getDebtRisks(req, res) {
+    try {
+      const userId = req.user.id
+      const risks = await resilienceEngine.detectDebtRisks(userId)
+      const actions = await resilienceEngine.getBeforeSpendActions(userId)
+      res.json({ risks, beforeSpendActions: actions })
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async getAdaptiveNudges(req, res) {
+    try {
+      const userId = req.user.id
+      const selected = await resilienceEngine.chooseNudgeVariant(userId, req.query.experiment_key || 'overspend')
+      const variants = await resilienceEngine.getAdaptiveNudgePolicy(userId)
+      res.json({ selected, variants })
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async logIntervention(req, res) {
+    try {
+      const userId = req.user.id
+      const log = await resilienceEngine.logIntervention(userId, req.body || {})
+      res.status(201).json(log)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async updateInterventionStatus(req, res) {
+    try {
+      const userId = req.user.id
+      const { logId } = req.params
+      const { status } = req.body
+      const result = await resilienceEngine.updateInterventionStatus(userId, logId, status)
+      res.json(result)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async getInterventionOutcomes(req, res) {
+    try {
+      const userId = req.user.id
+      await resilienceEngine.updateOutcomeMetrics(userId)
+      const summary = await resilienceEngine.getOutcomeSummary(userId)
+      res.json(summary)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async listMicroLearningCards(req, res) {
+    try {
+      const userId = req.user.id
+      const cards = await resilienceEngine.listMicroLearningCards(userId)
+      res.json(cards)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async createMicroLearningCard(req, res) {
+    try {
+      const userId = req.user.id
+      const { trigger_type, title, content, cta_label, cta_action } = req.body
+      const card = await resilienceEngine.createMicroLearningCard(userId, trigger_type, title, content, cta_label, cta_action)
+      res.status(201).json(card)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async completeMicroLearningCard(req, res) {
+    try {
+      const userId = req.user.id
+      const { cardId } = req.params
+      const result = await resilienceEngine.completeMicroCard(userId, cardId)
+      res.json(result)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async createCommitmentContract(req, res) {
+    try {
+      const userId = req.user.id
+      const { group_id, contract_type, target_value, stake_amount, due_date } = req.body
+      const contract = await resilienceEngine.createCommitmentContract(userId, group_id, contract_type, target_value, stake_amount, due_date)
+      res.status(201).json(contract)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async listCommitmentContracts(req, res) {
+    try {
+      const userId = req.user.id
+      const contracts = await resilienceEngine.listCommitmentContracts(userId, req.query.group_id)
+      res.json(contracts)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async resolveCommitmentContract(req, res) {
+    try {
+      const userId = req.user.id
+      const { contractId } = req.params
+      const { status, resolution_note } = req.body
+      const result = await resilienceEngine.resolveCommitmentContract(userId, contractId, status, resolution_note)
+      res.json(result)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async getGXBankIntegrationStory(req, res) {
+    try {
+      const mapping = [
+        { gxbank_capability: 'Transactions feed', used_for: 'Debt-risk detection + resilience scoring' },
+        { gxbank_capability: 'DuitNow transfers', used_for: 'Auto-save transfers + social commitment settlements' },
+        { gxbank_capability: 'Goal pockets', used_for: 'Emergency fund runway and next-best-action routing' },
+        { gxbank_capability: 'Card controls', used_for: 'Before-you-spend guardrails and risky merchant throttling' },
+        { gxbank_capability: 'Push notifications', used_for: 'Real-time adaptive nudges with fatigue controls' },
+      ]
+      res.json({
+        title: 'Powered by GXBank rails',
+        mapping,
+        judgeDemoFlow: [
+          'Onboard and infer user segment',
+          'Detect debt trap risk from live transaction behavior',
+          'Trigger before-you-spend intervention',
+          'Show resilience score movement + closed-loop outcomes',
+        ],
+      })
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async getFixedExpenses(req, res) {
+    try {
+      const userId = req.user.id
+      var result = await db.query(`SELECT * FROM fixed_expenses WHERE user_id = $1 ORDER BY due_day, name`, [userId])
+      res.json(result.rows)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async addFixedExpense(req, res) {
+    try {
+      const userId = req.user.id
+      var { name, amount, category, due_day } = req.body
+      if (!name || !amount) return res.status(400).json({ error: 'Name and amount required' })
+      var result = await db.query(
+        `INSERT INTO fixed_expenses (id, user_id, name, amount, category, due_day) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5) RETURNING *`,
+        [userId, name, amount, category || 'other', due_day || null]
+      )
+      res.status(201).json(result.rows[0])
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async deleteFixedExpense(req, res) {
+    try {
+      const userId = req.user.id
+      var { id } = req.params
+      await db.query(`DELETE FROM fixed_expenses WHERE id = $1 AND user_id = $2`, [id, userId])
+      res.json({ success: true })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async recordFixedExpenses(req, res) {
+    try {
+      const userId = req.user.id
+      const fixed = await db.query(`SELECT * FROM fixed_expenses WHERE user_id = $1`, [userId])
+      const month = myDate().slice(0, 7)
+      var count = 0
+      for (var f of fixed.rows) {
+        var existing = await db.query(
+          `SELECT id FROM transactions WHERE user_id = $1 AND merchant = $2 AND strftime('%Y-%m', transaction_date) = $3`,
+          [userId, 'Fixed: ' + f.name, month]
+        )
+        if (existing.rows.length === 0) {
+          await db.query(
+            `INSERT INTO transactions (user_id, gxbank_txn_id, amount, type, category, merchant, description, transaction_date)
+             VALUES ($1, $2, $3, 'debit', $4, $5, $6, $7)`,
+            [userId, 'FIX-' + Date.now() + '-' + count, f.amount, f.category || 'bills', 'Fixed: ' + f.name, 'Monthly ' + f.name, myDate()]
+          )
+          count++
+        }
+      }
+      res.json({ success: true, recorded: count })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async getAutopilotStatus(req, res) {
+    try {
+      const userId = req.user.id
+      const settings = await db.query(`SELECT * FROM autopilot_settings WHERE user_id = $1`, [userId])
+      const today = myDate()
+      const dailyLog = await db.query(
+        `SELECT * FROM autopilot_daily_logs WHERE user_id = $1 AND log_date = $2`, [userId, today]
+      )
+      const piggyTotal = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM piggy_bank_entries WHERE user_id = $1`, [userId]
+      )
+      const lastMonthIncome = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE user_id = $1 AND type = 'credit' AND strftime('%Y-%m', transaction_date) = strftime('%Y-%m', 'now', '-1 month')`,
+        [userId]
+      )
+      res.json({
+        settings: settings.rows[0] || null,
+        dailyLog: dailyLog.rows[0] || null,
+        piggyBankTotal: parseFloat(piggyTotal.rows[0].total),
+        lastMonthIncome: parseFloat(lastMonthIncome.rows[0].total)
+      })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async setupAutopilot(req, res) {
+    try {
+      const userId = req.user.id
+      var { lastMonthIncome, emergencyFundPct, savingsGoalsPct, fixedBillsMonthly } = req.body
+      if (!lastMonthIncome) return res.status(400).json({ error: 'lastMonthIncome is required' })
+      emergencyFundPct = emergencyFundPct || 10
+      savingsGoalsPct = savingsGoalsPct || 10
+      fixedBillsMonthly = fixedBillsMonthly || 0
+
+      const savingsPct = emergencyFundPct + savingsGoalsPct
+      const dailyTotal = lastMonthIncome - (lastMonthIncome * savingsPct / 100) - fixedBillsMonthly
+
+      await db.query(
+        `INSERT INTO autopilot_settings (id, user_id, is_active, last_month_income, emergency_fund_pct, savings_goals_pct, fixed_bills_monthly, daily_spending_total)
+         VALUES (gen_random_uuid(), $1, true, $2, $3, $4, $5, $6)
+         ON CONFLICT(user_id) DO UPDATE SET
+           last_month_income = $2, emergency_fund_pct = $3, savings_goals_pct = $4,
+           fixed_bills_monthly = $5, daily_spending_total = $6, is_active = true,
+           updated_at = datetime('now')`,
+        [userId, lastMonthIncome, emergencyFundPct, savingsGoalsPct, fixedBillsMonthly, dailyTotal]
+      )
+
+      const settings = await db.query(`SELECT * FROM autopilot_settings WHERE user_id = $1`, [userId])
+      res.json({ success: true, settings: settings.rows[0] })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async toggleAutopilot(req, res) {
+    try {
+      const userId = req.user.id
+      var { isActive } = req.body
+      await db.query(
+        `UPDATE autopilot_settings SET is_active = $1, updated_at = datetime('now') WHERE user_id = $2`,
+        [isActive ? 1 : 0, userId]
+      )
+      res.json({ success: true })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async getDailyLimit(req, res) {
+    try {
+      const userId = req.user.id
+      const settings = await db.query(`SELECT * FROM autopilot_settings WHERE user_id = $1 AND is_active = true`, [userId])
+      if (!settings.rows.length) return res.status(400).json({ error: 'Autopilot not set up' })
+
+      const s = settings.rows[0]
+      const today = myDate()
+      const daysInMonth = new Date().getDate()
+      const baseDaily = s.daily_spending_total / daysInMonth
+
+      const yesterday = myDate(-1)
+      const yesterdayLog = await db.query(
+        `SELECT * FROM autopilot_daily_logs WHERE user_id = $1 AND log_date = $2`, [userId, yesterday]
+      )
+
+      let rollover = 0
+      if (yesterdayLog.rows.length) {
+        const y = yesterdayLog.rows[0]
+        rollover = Math.max(0, parseFloat(y.daily_limit) - parseFloat(y.spent))
+      }
+
+      const todayLimit = baseDaily + rollover
+
+      await db.query(
+        `INSERT INTO autopilot_daily_logs (id, user_id, log_date, daily_limit, rolled_over)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4)
+         ON CONFLICT(user_id, log_date) DO UPDATE SET daily_limit = $3, rolled_over = $4`,
+        [userId, today, todayLimit, rollover]
+      )
+
+      const todayLog = await db.query(
+        `SELECT * FROM autopilot_daily_logs WHERE user_id = $1 AND log_date = $2`, [userId, today]
+      )
+
+      res.json({
+        dailyLimit: todayLimit,
+        baseDaily: baseDaily,
+        rollover: rollover,
+        spent: parseFloat(todayLog.rows[0]?.spent || 0),
+        remaining: todayLimit - parseFloat(todayLog.rows[0]?.spent || 0),
+        logDate: today
+      })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async recordDailySpending(req, res) {
+    try {
+      const userId = req.user.id
+      var { amount } = req.body
+      if (!amount || amount <= 0) return res.status(400).json({ error: 'Valid amount required' })
+
+      const today = myDate()
+      await db.query(
+        `UPDATE autopilot_daily_logs SET spent = spent + $1 WHERE user_id = $2 AND log_date = $3`,
+        [amount, userId, today]
+      )
+
+      const log = await db.query(
+        `SELECT * FROM autopilot_daily_logs WHERE user_id = $1 AND log_date = $2`, [userId, today]
+      )
+
+      res.json({ success: true, spent: parseFloat(log.rows[0]?.spent || 0) })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async getPiggyBank(req, res) {
+    try {
+      const userId = req.user.id
+      const entries = await db.query(
+        `SELECT * FROM piggy_bank_entries WHERE user_id = $1 ORDER BY created_at DESC`, [userId]
+      )
+      const total = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM piggy_bank_entries WHERE user_id = $1`, [userId]
+      )
+      res.json({ entries: entries.rows, total: parseFloat(total.rows[0].total) })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async addPiggyBankRoundUp(req, res) {
+    try {
+      const userId = req.user.id
+      var { amount, sourceTxnId, description } = req.body
+      if (!amount || amount <= 0) return res.status(400).json({ error: 'Valid amount required' })
+
+      await db.query(
+        `INSERT INTO piggy_bank_entries (id, user_id, amount, source_txn_id, description)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
+        [userId, amount, sourceTxnId || null, description || 'Round-up']
+      )
+
+      const total = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) as total FROM piggy_bank_entries WHERE user_id = $1`, [userId]
+      )
+
+      res.json({ success: true, total: parseFloat(total.rows[0].total) })
+    } catch (error) { res.status(500).json({ error: error.message }) }
   }
 }
 
