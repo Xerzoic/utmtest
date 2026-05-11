@@ -34,7 +34,7 @@ class AutoSaveEngine {
 
   async executeRoundUp(transactionId) {
     const transaction = await db.query(
-      `SELECT t.*, ar.id as rule_id, ar.config
+      `SELECT t.*, ar.id as rule_id, ar.config, ar.roundup_multiplier
        FROM transactions t
        JOIN autosave_rules ar ON ar.user_id = t.user_id AND ar.rule_type = 'round_up' AND ar.is_active = true
        WHERE t.id = $1`,
@@ -45,7 +45,8 @@ class AutoSaveEngine {
 
     const txn = transaction.rows[0]
     const amount = parseFloat(txn.amount)
-    const roundUp = Math.ceil(amount) - amount
+    const multiplier = parseFloat(txn.roundup_multiplier || 1.0)
+    const roundUp = (Math.ceil(amount) - amount) * multiplier
 
     if (roundUp < 0.10) return null
 

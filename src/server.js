@@ -20,6 +20,7 @@ const db = require('./database/connection')
 const nudgeEngine = require('./services/NudgeEngine')
 const aiEngine = require('./services/AIEngine')
 const autoSaveEngine = require('./services/AutoSaveEngine')
+const resilienceEngine = require('./services/ResilienceEngine')
 
 app.use('/auth', authRoutes)
 app.use('/api', apiRoutes)
@@ -78,6 +79,28 @@ cron.schedule('0 1 * * *', async () => {
   const users = await db.query('SELECT DISTINCT user_id FROM autosave_rules WHERE rule_type = \'salary_trigger\' AND is_active = true')
   for (const user of users.rows) {
     await autoSaveEngine.executeSalaryTrigger(user.user_id)
+  }
+})
+
+// Nightly auto-arbitration at 11:59 PM
+cron.schedule('59 23 * * *', async () => {
+  console.log('Running nightly contract auto-arbitration...')
+  try {
+    const results = await resilienceEngine.runAutoArbitration()
+    console.log('Auto-arbitration completed:', results.length, 'users processed')
+  } catch (e) {
+    console.error('Auto-arbitration failed:', e.message)
+  }
+})
+
+// Check for expiring contracts every 2 hours
+cron.schedule('0 */2 * * *', async () => {
+  console.log('Checking for expiring contracts...')
+  try {
+    const result = await resilienceEngine.checkAllExpiringContracts()
+    console.log('Expiry check done:', result.checked, 'users notified')
+  } catch (e) {
+    console.error('Expiry check failed:', e.message)
   }
 })
 

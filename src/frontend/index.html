@@ -83,7 +83,7 @@
             <span class="icon">🔔</span>
             <span id="nudgeCount" class="badge" style="display:none">0</span>
           </button>
-          <div class="user-avatar" id="userAvatar">?</div>
+          <div class="user-avatar" id="userAvatar" onclick="openProfileModal()">?</div>
         </div>
       </header>
 
@@ -351,9 +351,9 @@
           <section class="quick-actions">
             <h2 class="section-title">Cash Flow</h2>
             <div class="action-grid">
-              <button class="action-btn action-btn-highlight" onclick="openExpenseModal()">
+              <button class="action-btn action-btn-highlight" onclick="openSendMoneyModal()">
                 <span class="action-icon">💸</span>
-                <span class="action-label">Log Expense</span>
+                <span class="action-label">Send / Log</span>
               </button>
               <button class="action-btn" onclick="openRoundUpPanel()">
                 <span class="action-icon">🪙</span>
@@ -490,9 +490,23 @@
           <section class="discover-section">
             <div class="tab-header">
               <h2>Commitment Contracts</h2>
-              <button class="btn-secondary btn-sm" onclick="createSampleCommitment()">+ Add Contract</button>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn-secondary btn-sm" onclick="createSampleCommitment()">+ Add Contract</button>
+                <button class="btn-secondary btn-sm" onclick="checkExpiringContracts()">Check Expiry</button>
+                <button class="btn-secondary btn-sm" onclick="runAutoArbitration()">Auto-Verify</button>
+              </div>
             </div>
             <div id="contractList" class="groups-grid"></div>
+          </section>
+
+          <section class="discover-section">
+            <div class="tab-header">
+              <h2>⏳ Cool-Down List</h2>
+              <button class="btn-secondary btn-sm" onclick="loadCooldownList()">Refresh</button>
+            </div>
+            <div id="coolDownList" class="groups-grid">
+              <p class='empty-state'>No deferred purchases yet. Send money with a 48h cool-down to see items here.</p>
+            </div>
           </section>
         </div>
 
@@ -607,41 +621,6 @@
             <div class="modal-actions">
               <button type="button" class="btn-secondary" onclick="closeModal('newGroupModal')">Cancel</button>
               <button type="submit" class="btn-primary">Create Group</button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <div id="expenseModal" class="modal">
-        <div class="modal-content">
-          <h2>Log Daily Expense</h2>
-          <form id="expenseForm" onsubmit="submitExpense(event)">
-            <label>Amount (RM)</label>
-            <input type="number" id="expenseAmount" placeholder="0.00" step="0.01" min="0.01" required>
-
-            <label>Category</label>
-            <select id="expenseCategory" required>
-              <option value="">Select category...</option>
-              <option value="food">🍔 Food & Drinks</option>
-              <option value="transport">🚗 Transport</option>
-              <option value="shopping">🛍️ Shopping</option>
-              <option value="entertainment">🎬 Entertainment</option>
-              <option value="bills">💡 Bills & Utilities</option>
-              <option value="health">🏥 Health</option>
-              <option value="education">📚 Education</option>
-              <option value="groceries">🛒 Groceries</option>
-              <option value="other">📌 Other</option>
-            </select>
-
-            <label>Note (optional)</label>
-            <input type="text" id="expenseNote" placeholder="e.g. Lunch at Nasi Kandar" maxlength="100">
-
-            <label>Date</label>
-            <input type="date" id="expenseDate" required>
-
-            <div class="modal-actions">
-              <button type="button" class="btn-secondary" onclick="closeModal('expenseModal')">Cancel</button>
-              <button type="submit" class="btn-primary">Log Expense</button>
             </div>
           </form>
         </div>
@@ -871,9 +850,28 @@
           </div>
           <div class="send-form">
             <label>Amount (RM)</label>
-            <input type="number" id="sendAmount" placeholder="0.00" step="0.01" min="0.01">
+            <input type="number" id="sendAmount" placeholder="0.00" step="0.01" min="0.01" oninput="onSendAmountChange()">
+            <label>Category (optional — select to auto-track as expense)</label>
+            <select id="sendCategory">
+              <option value="">None — just send</option>
+              <option value="food">🍔 Food & Drinks</option>
+              <option value="transport">🚗 Transport</option>
+              <option value="shopping">🛍️ Shopping</option>
+              <option value="entertainment">🎬 Entertainment</option>
+              <option value="bills">💡 Bills & Utilities</option>
+              <option value="health">🏥 Health</option>
+              <option value="education">📚 Education</option>
+              <option value="groceries">🛒 Groceries</option>
+              <option value="other">📌 Other</option>
+            </select>
             <label>Note (optional)</label>
             <input type="text" id="sendNote" placeholder="e.g. Lunch split..." maxlength="100">
+            <label>Date</label>
+            <input type="date" id="sendDate">
+          </div>
+          <div id="coolDownPredictArea" class="cool-down-predict" style="display:none">
+            <p id="coolDownPredictText" class="cool-down-text"></p>
+            <button class="btn-secondary btn-sm" id="coolDownAddBtn" onclick="addToCooldownFromSend()" style="display:none">⏳ Add to 48h Cool-Down List</button>
           </div>
           <div class="modal-actions">
             <button type="button" class="btn-secondary" onclick="closeModal('sendMoneyModal')">Cancel</button>
@@ -966,6 +964,55 @@
       <div class="modal-actions">
         <button type="button" class="btn-secondary" onclick="closeModal('autopilotSetupModal')">Cancel</button>
         <button type="button" class="btn-primary" onclick="saveAutopilotSetup()">Activate Autopilot</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="profileModal" class="modal">
+    <div class="modal-content profile-modal-content">
+      <div class="profile-modal-header">
+        <div class="profile-avatar-large" id="profileAvatarLarge">?</div>
+        <h2 id="profileName">...</h2>
+        <p class="profile-role" id="profileEmail">...</p>
+      </div>
+      <div class="profile-details">
+        <div class="profile-detail-row">
+          <span class="profile-detail-label">📱 Phone</span>
+          <span class="profile-detail-value" id="profilePhone">-</span>
+        </div>
+        <div class="profile-detail-row">
+          <span class="profile-detail-label">💰 Monthly Income</span>
+          <span class="profile-detail-value" id="profileIncome">-</span>
+        </div>
+        <div class="profile-detail-row">
+          <span class="profile-detail-label">🏦 GXBank Account</span>
+          <span class="profile-detail-value" id="profileAccount">-</span>
+        </div>
+        <div class="profile-detail-row">
+          <span class="profile-detail-label">📊 Risk Profile</span>
+          <span class="profile-detail-value" id="profileRisk">-</span>
+        </div>
+      </div>
+      <div class="profile-stats-grid">
+        <div class="profile-stat">
+          <span class="profile-stat-value" id="profileLevel">1</span>
+          <span class="profile-stat-label">Level</span>
+        </div>
+        <div class="profile-stat">
+          <span class="profile-stat-value" id="profileXP">0</span>
+          <span class="profile-stat-label">XP</span>
+        </div>
+        <div class="profile-stat">
+          <span class="profile-stat-value" id="profileStreak">0</span>
+          <span class="profile-stat-label">Day Streak</span>
+        </div>
+        <div class="profile-stat">
+          <span class="profile-stat-value" id="profileSavings">RM 0</span>
+          <span class="profile-stat-label">Total Saved</span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" onclick="closeModal('profileModal')">Close</button>
       </div>
     </div>
   </div>

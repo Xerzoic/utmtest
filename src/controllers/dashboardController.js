@@ -450,7 +450,7 @@ class DashboardController {
   async addDailyExpenditure(req, res) {
     try {
       const userId = req.user.id
-      const { amount, category, note, expenditure_date } = req.body
+      const { amount, category, note, expenditure_date, merchant } = req.body
 
       if (!amount || amount <= 0) {
         return res.status(400).json({ error: 'Amount must be greater than 0' })
@@ -467,10 +467,11 @@ class DashboardController {
         [userId, amount, category, note || null, expenditure_date]
       )
 
+      const merchantName = merchant || 'Manual Entry'
       const txnResult = await db.query(
         `INSERT INTO transactions (id, user_id, gxbank_txn_id, amount, type, category, merchant, description, transaction_date)
-         VALUES (gen_random_uuid(), $1, $2, $3, 'debit', $4, 'Manual Entry', $5, COALESCE($6, date('now'))) RETURNING *`,
-        [userId, `EXP-${Date.now()}`, amount, category, note || 'Daily expenditure', expenditure_date]
+         VALUES (gen_random_uuid(), $1, $2, $3, 'debit', $4, $5, $6, COALESCE($7, date('now'))) RETURNING *`,
+        [userId, `EXP-${Date.now()}`, amount, category, merchantName, note || 'Daily expenditure', expenditure_date]
       )
 
       const txn = txnResult.rows[0]
@@ -859,6 +860,12 @@ class DashboardController {
       const userId = req.user.id
       const risks = await resilienceEngine.detectDebtRisks(userId)
       const actions = await resilienceEngine.getBeforeSpendActions(userId)
+      // Auto-increase round-up multiplier when risks detected
+      if (risks.length > 0) {
+        try {
+          await resilienceEngine.adjustRoundUpMultiplier(userId, 2.0)
+        } catch (e) { /* non-blocking */ }
+      }
       res.json({ risks, beforeSpendActions: actions })
     } catch (error) {
       res.status(500).json({ error: error.message })
@@ -962,13 +969,151 @@ class DashboardController {
     }
   }
 
+  // === COOL-DOWN LIST ===
+  async predictPurchaseImpact(req, res) {
+    try {
+      const userId = req.user.id
+      const { amount } = req.body
+      const result = await resilienceEngine.predictPurchaseImpact(userId, amount)
+      res.json(result)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async addToCooldown(req, res) {
+    try {
+      const userId = req.user.id
+      const { merchant, amount, description, predicted_impact } = req.body
+      const entry = await resilienceEngine.addToCooldown(userId, merchant, amount, description, predicted_impact)
+      res.status(201).json(entry)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async getCooldownList(req, res) {
+    try {
+      const userId = req.user.id
+      const list = await resilienceEngine.getCooldownList(userId)
+      res.json(list)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async confirmCooldownEntry(req, res) {
+    try {
+      const userId = req.user.id
+      const { entryId } = req.params
+      const result = await resilienceEngine.confirmCooldownEntry(userId, entryId)
+      res.json(result)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async abandonCooldownEntry(req, res) {
+    try {
+      const userId = req.user.id
+      const { entryId } = req.params
+      const result = await resilienceEngine.abandonCooldownEntry(userId, entryId)
+      res.json(result)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  // === DYNAMIC BUDGET RESET ===
+  async applyBudgetReset(req, res) {
+    try {
+      const userId = req.user.id
+      const { overspent_amount } = req.body
+      const result = await resilienceEngine.applyBudgetReset(userId, overspent_amount)
+      res.json(result)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async tryAutoBudgetReset(req, res) {
+    try {
+      const userId = req.user.id
+      const result = await resilienceEngine.tryAutoBudgetReset(userId)
+      res.json(result || { noAction: true })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  // === MULTIPLIER ADJUSTMENT ===
+  async adjustRoundUpMultiplier(req, res) {
+    try {
+      const userId = req.user.id
+      const { multiplier } = req.body
+      const result = await resilienceEngine.adjustRoundUpMultiplier(userId, multiplier || 2.0)
+      res.json(result)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async tryAutoIncreaseMultiplier(req, res) {
+    try {
+      const userId = req.user.id
+      const result = await resilienceEngine.tryAutoIncreaseMultiplier(userId)
+      res.json(result)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
   async resolveCommitmentContract(req, res) {
     try {
       const userId = req.user.id
       const { contractId } = req.params
       const { status, resolution_note } = req.body
       const result = await resilienceEngine.resolveCommitmentContract(userId, contractId, status, resolution_note)
+      // Award pet XP on completion
+      if (status === 'completed') {
+        try {
+          await petEngine.awardContractXp(userId)
+        } catch (e) {}
+      }
       res.json(result)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async getContractRecommendations(req, res) {
+    try {
+      const userId = req.user.id
+      const recommendations = await resilienceEngine.getRecommendedContracts(userId)
+      res.json(recommendations)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async acceptContractRecommendation(req, res) {
+    try {
+      const userId = req.user.id
+      const recommendation = req.body
+      const contract = await resilienceEngine.acceptContractRecommendation(userId, recommendation)
+      if (contract.error) return res.status(400).json(contract)
+      res.status(201).json(contract)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async checkExpiringContracts(req, res) {
+    try {
+      const userId = req.user.id
+      const result = await resilienceEngine.checkExpiringContracts(userId)
+      res.json(result)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async autoArbitrateContracts(req, res) {
+    try {
+      const userId = req.user.id
+      const results = await resilienceEngine.autoArbitrateContracts(userId)
+      res.json(results)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
+  async runAutoArbitrationAll(req, res) {
+    try {
+      const results = await resilienceEngine.runAutoArbitration()
+      res.json(results)
     } catch (error) {
       res.status(500).json({ error: error.message })
     }
@@ -1206,6 +1351,17 @@ class DashboardController {
       const log = await db.query(
         `SELECT * FROM autopilot_daily_logs WHERE user_id = $1 AND log_date = $2`, [userId, today]
       )
+
+      // Auto-trigger budget reset if overspending detected
+      try {
+        if (log.rows.length) {
+          const spent = parseFloat(log.rows[0].spent || 0)
+          const limit = parseFloat(log.rows[0].daily_limit || 0)
+          if (limit > 0 && spent > limit) {
+            await resilienceEngine.applyBudgetReset(userId, spent - limit)
+          }
+        }
+      } catch (e) { /* non-blocking */ }
 
       res.json({ success: true, spent: parseFloat(log.rows[0]?.spent || 0) })
     } catch (error) { res.status(500).json({ error: error.message }) }

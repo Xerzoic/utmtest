@@ -14,6 +14,33 @@ for (const statement of statements) {
   }
 }
 
+// Migration: add stake redirect columns to commitment_contracts
+try { db.exec("ALTER TABLE commitment_contracts ADD COLUMN stake_redirect_goal_id TEXT REFERENCES goals(id)") } catch (e) {}
+try { db.exec("ALTER TABLE commitment_contracts ADD COLUMN stake_locked_until TEXT") } catch (e) {}
+try { db.exec("ALTER TABLE commitment_contracts ADD COLUMN auto_verified INTEGER DEFAULT 0") } catch (e) {}
+try { db.exec("ALTER TABLE commitment_contracts ADD COLUMN auto_verified_at TEXT") } catch (e) {}
+
+// Migration: cool-down entries table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS cool_down_entries (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    merchant TEXT,
+    amount REAL NOT NULL,
+    description TEXT,
+    predicted_impact TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'abandoned', 'expired')),
+    deferred_until TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+    confirmed_at TEXT,
+    abandoned_at TEXT
+  )
+`)
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_cool_down_user_status ON cool_down_entries(user_id, status)") } catch (e) {}
+
+// Migration: roundup_multiplier on autosave_rules
+try { db.exec("ALTER TABLE autosave_rules ADD COLUMN roundup_multiplier REAL DEFAULT 1.0") } catch (e) {}
+
 function toSQLite(sql) {
   let result = sql
     .replace(/\$([0-9]+)/g, '?$1')

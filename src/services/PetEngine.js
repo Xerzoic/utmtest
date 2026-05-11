@@ -27,6 +27,20 @@ class PetEngine {
     goal_progress: ["Your {goalName} just hit {percent}%! I can feel myself getting taller!", "Amazing progress on {goalName}! We're {percent}% there!"],
     budget_warning: ["Your {category} budget is {percent}% gone. Let's slow down on that!", "Watch out! {category} spending is getting close to the limit."],
     evolution: ["I EVOLVED! Thank you for taking such great care of me! 🎉", "Look at me now! Your consistent good habits helped me grow! ✨"],
+    contract_created: ["A new contract! I'll be watching over this one. You've got this!", "Contract signed! I'll help you stay accountable for {contract_type}!"],
+    contract_completed: ["Contract complete! You did it! Here's some XP for your effort 🎉", "Amazing! You fulfilled your {contract_type} contract! I'm so proud!"],
+    contract_failed: ["Oh no, the {contract_type} contract didn't work out. The stake went to emergency savings though!", "We stumbled on {contract_type}. Let's learn and try again!"],
+    contract_expiring: ["Your {contract_type} contract expires in {hours} hours! Better wrap it up!", "Time's almost up on {contract_type}! I'm getting nervous..."],
+    budget_reset: ["Your daily limit just dropped from RM{oldLimit} to RM{newLimit} — let's make every ringgit count!", "I tightened the belt for us. Daily spend is now RM{newLimit} to protect your essentials."],
+    multiplier_adjusted: ["I cranked up your round-up from {oldMul}x to {newMul}x — every sen you spend now works double duty!", "Round-up boost active! {newMul}x on every purchase means faster savings growth."],
+  }
+
+  async awardContractXp(userId) {
+    await db.query(
+      `UPDATE pet_state SET evolution_points = evolution_points + 10, updated_at = datetime('now') WHERE user_id = $1`,
+      [userId]
+    )
+    return { xpAwarded: 10 }
   }
 
   _getMood(hp) {
@@ -360,6 +374,24 @@ class PetEngine {
         break
       case 'budget_warning':
         dialogueKey = 'budget_warning'
+        break
+      case 'contract_created':
+        dialogueKey = 'contract_created'
+        break
+      case 'contract_completed':
+        dialogueKey = 'contract_completed'
+        break
+      case 'contract_failed':
+        dialogueKey = 'contract_failed'
+        break
+      case 'contract_expiring':
+        dialogueKey = 'contract_expiring'
+        break
+      case 'budget_reset':
+        dialogueKey = 'budget_reset'
+        break
+      case 'multiplier_adjusted':
+        dialogueKey = 'multiplier_adjusted'
         break
     }
 

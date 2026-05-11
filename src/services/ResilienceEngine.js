@@ -348,16 +348,75 @@ class ResilienceEngine {
        RETURNING *`,
       [groupId, userId, contractType, targetValue, stakeAmount || 0, dueDate || null]
     )
+
+    try {
+      const petEngine = require('./PetEngine')
+      await petEngine.triggerPetReaction(userId, 'contract_created', { contract_type: contractType })
+    } catch (e) { /* Pet errors non-blocking */ }
+
     return result.rows[0]
   }
 
   async resolveCommitmentContract(userId, contractId, status, note) {
-    await db.query(
-      `UPDATE commitment_contracts SET status = $1, resolution_note = $2, resolved_at = datetime('now')
-       WHERE id = $3 AND user_id = $4`,
-      [status, note || '', contractId, userId]
+    const contract = await db.query(
+      `SELECT * FROM commitment_contracts WHERE id = $1 AND user_id = $2`,
+      [contractId, userId]
     )
-    return { success: true }
+    if (!contract.rows.length) return { error: 'Contract not found' }
+    const c = contract.rows[0]
+
+    let redirectGoalId = null
+    let lockUntil = null
+
+    if (status === 'failed' && parseFloat(c.stake_amount || 0) > 0) {
+      const stake = parseFloat(c.stake_amount)
+      let goal = await db.query(
+        `SELECT id FROM goals WHERE user_id = $1 AND category = 'emergency' AND is_active = 1 LIMIT 1`,
+        [userId]
+      )
+
+      if (goal.rows.length) {
+        await db.query(
+          `UPDATE goals SET current_amount = current_amount + $1, updated_at = datetime('now') WHERE id = $2`,
+          [stake, goal.rows[0].id]
+        )
+        redirectGoalId = goal.rows[0].id
+      } else {
+        const result = await db.query(
+          `INSERT INTO goals (id, user_id, name, target_amount, current_amount, category, priority)
+           VALUES (gen_random_uuid(), $1, 'Emergency Fund (Redirected Stake)', $2, $3, 'emergency', 'high')
+           RETURNING id`,
+          [userId, Math.max(stake, 500), stake]
+        )
+        redirectGoalId = result.rows[0].id
+      }
+
+      lockUntil = new Date()
+      lockUntil.setDate(lockUntil.getDate() + 30)
+      await db.query(
+        `UPDATE goals SET updated_at = datetime('now') WHERE id = $1`,
+        [redirectGoalId]
+      )
+    }
+
+    await db.query(
+      `UPDATE commitment_contracts SET status = $1, resolution_note = $2, resolved_at = datetime('now'),
+       stake_redirect_goal_id = $5, stake_locked_until = $6
+       WHERE id = $3 AND user_id = $4`,
+      [status, note || '', contractId, userId, redirectGoalId, lockUntil ? lockUntil.toISOString().split('T')[0] : null]
+    )
+
+    // Pet reaction
+    try {
+      const petEngine = require('./PetEngine')
+      if (status === 'completed') {
+        await petEngine.triggerPetReaction(userId, 'contract_completed', { contract_type: c.contract_type })
+      } else if (status === 'failed') {
+        await petEngine.triggerPetReaction(userId, 'contract_failed', { contract_type: c.contract_type, stake: c.stake_amount })
+      }
+    } catch (e) { /* Pet errors non-blocking */ }
+
+    return { success: true, redirect_goal_id: redirectGoalId, locked_until: lockUntil }
   }
 
   async listCommitmentContracts(userId, groupId) {
@@ -372,6 +431,428 @@ class ResilienceEngine {
       params
     )
     return result.rows
+  }
+
+  async getRecommendedContracts(userId) {
+    const score = await this.computeResilienceScore(userId)
+    const existing = await this.listCommitmentContracts(userId)
+    const activeTypes = new Set(existing.filter(c => c.status === 'active').map(c => c.contract_type))
+    const recommendations = []
+
+    if (score.debtPressure > 40 && !activeTypes.has('no_new_debt')) {
+      recommendations.push({
+        contract_type: 'no_new_debt',
+        target_value: 0,
+        stake_amount: 10,
+        due_date_offset_days: 30,
+        reason: 'High debt pressure detected — commit to no new BNPL/loans this month',
+        label: 'No New Debt This Month',
+      })
+    }
+
+    if (score.spendingVolatility > 40 && !activeTypes.has('weekend_cap')) {
+      recommendations.push({
+        contract_type: 'weekend_cap',
+        target_value: 50,
+        stake_amount: 5,
+        due_date_offset_days: 7,
+        reason: 'Your spending is volatile on weekends — cap weekend spend at RM50',
+        label: 'Weekend Spending ≤ RM50',
+      })
+    }
+
+    if (score.savingsRate < 15) {
+      const suggestedSave = Math.max(20, Math.round((score.savingsRate < 5 ? 50 : 30)))
+      const key = `save_${suggestedSave}_weekly`
+      if (!activeTypes.has(key)) {
+        recommendations.push({
+          contract_type: key,
+          target_value: suggestedSave,
+          stake_amount: Math.round(suggestedSave * 0.15),
+          due_date_offset_days: 7,
+          reason: `Savings rate is only ${score.savingsRate}% — try saving RM${suggestedSave} this week`,
+          label: `Save RM${suggestedSave} This Week`,
+        })
+      }
+    }
+
+    return recommendations
+  }
+
+  async acceptContractRecommendation(userId, recommendation) {
+    const groups = await db.query(
+      `SELECT id FROM savings_groups WHERE created_by = $1 ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    )
+    const groupId = groups.rows[0]?.id
+    if (!groupId) return { error: 'Join or create a savings group first' }
+
+    const dueDate = new Date()
+    dueDate.setDate(dueDate.getDate() + (recommendation.due_date_offset_days || 7))
+    const dueDateStr = dueDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' })
+
+    const contract = await this.createCommitmentContract(
+      userId, groupId, recommendation.contract_type,
+      recommendation.target_value, recommendation.stake_amount, dueDateStr
+    )
+
+    await this.logIntervention(userId, {
+      intervention_type: 'contract_recommendation_accepted',
+      variant_key: recommendation.contract_type,
+      status: 'accepted',
+      context: { recommendation },
+    })
+
+    return contract
+  }
+
+  async checkExpiringContracts(userId) {
+    const now = new Date()
+    const nearExpiry = await db.query(
+      `SELECT * FROM commitment_contracts WHERE user_id = $1 AND status = 'active'
+       AND due_date IS NOT NULL AND due_date <= datetime('now', '+4 hours') AND due_date > datetime('now')`,
+      [userId]
+    )
+    const petEngine = require('./PetEngine')
+    for (const c of nearExpiry.rows) {
+      const hours = Math.max(1, Math.round((new Date(c.due_date) - now) / (1000 * 60 * 60)))
+      await petEngine.triggerPetReaction(userId, 'contract_expiring', { contract_type: c.contract_type, hours: String(hours) })
+    }
+    return { checked: nearExpiry.rows.length }
+  }
+
+  async checkAllExpiringContracts() {
+    const users = await db.query(`SELECT DISTINCT user_id FROM commitment_contracts WHERE status = 'active' AND due_date IS NOT NULL AND due_date <= datetime('now', '+4 hours') AND due_date > datetime('now')`)
+    for (const row of users.rows) {
+      await this.checkExpiringContracts(row.user_id)
+    }
+    return { checked: users.rows.length }
+  }
+
+  async autoArbitrateContracts(userId) {
+    const active = await db.query(
+      `SELECT * FROM commitment_contracts WHERE user_id = $1 AND status = 'active'
+       AND due_date IS NOT NULL AND due_date <= datetime('now', '+8 hours')`,
+      [userId]
+    )
+    const results = []
+    for (const c of active.rows) {
+      const outcome = await this._verifyContract(userId, c)
+      if (outcome.autoCompleted) {
+        await this.resolveCommitmentContract(userId, c.id, 'completed', 'Auto-verified by AI arbitration')
+        await nudgeEngine.createNudge(
+          userId, 'contract_arbitration',
+          'Contract Auto-Verified',
+          `Your "${c.contract_type}" contract was automatically verified. Well done!`,
+          { priority: 'normal', context: { contract_id: c.id, contract_type: c.contract_type } }
+        )
+        try {
+          const petEngine = require('./PetEngine')
+          await petEngine.awardContractXp(userId)
+        } catch (e) {}
+        results.push({ contractId: c.id, autoCompleted: true, reason: outcome.reason })
+      } else if (outcome.autoFailed) {
+        await this.resolveCommitmentContract(userId, c.id, 'failed', 'Auto-failed by AI arbitration: ' + outcome.reason)
+        await nudgeEngine.createNudge(
+          userId, 'contract_arbitration',
+          'Contract Auto-Failed',
+          `Your "${c.contract_type}" contract was not fulfilled. Stake redirected to emergency savings.`,
+          { priority: 'high', context: { contract_id: c.id, contract_type: c.contract_type } }
+        )
+        results.push({ contractId: c.id, autoCompleted: false, reason: outcome.reason })
+      }
+    }
+    return results
+  }
+
+  async _verifyContract(userId, contract) {
+    const aiEngine = require('./AIEngine')
+    const since = contract.created_at
+      ? new Date(contract.created_at).toISOString().split('T')[0]
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+    let violationFound = false
+    let fulfilmentFound = false
+    let violationReason = ''
+
+    const txns = await db.query(
+      `SELECT * FROM transactions WHERE user_id = $1 AND type = 'debit'
+       AND transaction_date >= $2`,
+      [userId, since]
+    )
+
+    if (contract.contract_type === 'no_new_debt') {
+      for (const t of txns.rows) {
+        const cat = await aiEngine.categoriseTransaction({ merchant: t.merchant, description: t.description })
+        if (/bnpl|loan|paylater|pinjaman/i.test(cat)) {
+          violationFound = true
+          violationReason = `BNPL/loan transaction detected: ${t.merchant || t.description}`
+          break
+        }
+      }
+      fulfilmentFound = !violationFound
+    } else if (contract.contract_type === 'weekend_cap') {
+      const maxAllowed = parseFloat(contract.target_value || 50)
+      for (const t of txns.rows) {
+        const d = new Date(t.transaction_date)
+        if (d.getDay() === 0 || d.getDay() === 6) {
+          if (parseFloat(t.amount) > maxAllowed) {
+            violationFound = true
+            violationReason = `Weekend spend of RM${t.amount} exceeds RM${maxAllowed} cap at ${t.merchant}`
+            break
+          }
+        }
+      }
+      fulfilmentFound = !violationFound
+    } else if (contract.contract_type && contract.contract_type.startsWith('save_')) {
+      const targetSave = parseFloat(contract.target_value || 0)
+      const credits = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+         WHERE user_id = $1 AND type = 'credit' AND category = 'savings'
+         AND transaction_date >= $2`,
+        [userId, since]
+      )
+      const saved = parseFloat(credits.rows[0]?.total || 0)
+      if (saved >= targetSave) {
+        fulfilmentFound = true
+      } else {
+        violationFound = true
+        violationReason = `Only saved RM${saved.toFixed(2)} of RM${targetSave} target`
+      }
+    }
+
+    if (contract.due_date) {
+      const now = new Date()
+      const due = new Date(contract.due_date)
+      if (now > due && !fulfilmentFound) {
+        return { autoFailed: true, reason: 'Contract expired without fulfilment: ' + violationReason }
+      }
+    }
+
+    if (fulfilmentFound) {
+      return { autoCompleted: true, reason: 'Contract conditions met based on transaction history' }
+    }
+
+    return { autoCompleted: false, autoFailed: false, reason: 'Pending — deadline not yet reached' }
+  }
+
+  async runAutoArbitration() {
+    const users = await db.query(
+      `SELECT DISTINCT user_id FROM commitment_contracts WHERE status = 'active' AND due_date IS NOT NULL`
+    )
+    const all = []
+    for (const row of users.rows) {
+      const results = await this.autoArbitrateContracts(row.user_id)
+      all.push({ userId: row.user_id, results })
+    }
+    return all
+  }
+
+  // === COOL-DOWN LIST (48-hour deferral) ===
+
+  async predictPurchaseImpact(userId, amount) {
+    if (!amount || amount <= 0) return { impact: 'low', message: 'Enter an amount to see the impact prediction' }
+    const score = await this.computeResilienceScore(userId)
+    const income = await db.query(`SELECT monthly_income FROM users WHERE id = $1`, [userId])
+    const monthlyIncome = parseFloat(income.rows[0]?.monthly_income || 0)
+    const remainingBudget = monthlyIncome > 0 ? monthlyIncome - (monthlyIncome * (score.savingsRate / 100)) : 0
+    const projectedEndBalance = remainingBudget - amount
+    const impact = projectedEndBalance <= 0
+      ? 'critical'
+      : projectedEndBalance < remainingBudget * 0.2
+        ? 'high'
+        : projectedEndBalance < remainingBudget * 0.5
+          ? 'medium'
+          : 'low'
+    const messages = {
+      critical: `AI predicts this RM${amount} spend will zero out your month-end balance. 20% of users who wait 48h abandon similar purchases.`,
+      high: `This RM${amount} spend would leave you with only RM${projectedEndBalance.toFixed(0)} for the rest of the month. Consider a 48h cool-down.`,
+      medium: `This RM${amount} purchase is manageable but represents ${(amount / Math.max(remainingBudget, 1) * 100).toFixed(0)}% of your remaining budget.`,
+      low: `This RM${amount} spend looks safe. Your remaining budget allows it comfortably.`,
+    }
+    return { impact, message: messages[impact], projectedEndBalance: Math.max(0, projectedEndBalance).toFixed(2) }
+  }
+
+  async addToCooldown(userId, merchant, amount, description, predictedImpact) {
+    const deferredUntil = new Date()
+    deferredUntil.setHours(deferredUntil.getHours() + 48)
+    const deferredStr = deferredUntil.toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }) + ' ' +
+      deferredUntil.toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kuala_Lumpur' })
+
+    const result = await db.query(
+      `INSERT INTO cool_down_entries (user_id, merchant, amount, description, predicted_impact, deferred_until)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [userId, merchant || 'Purchase', parseFloat(amount), description || '', predictedImpact || '', deferredStr]
+    )
+
+    await nudgeEngine.createNudge(
+      userId, 'cool_down_added',
+      'Purchase Added to Cool-Down',
+      `RM${amount} ${merchant ? 'at ' + merchant : ''} — revisit in 48h before deciding.`,
+      { priority: 'normal', context: { entry_id: result.rows[0].id, amount, merchant } }
+    )
+
+    return result.rows[0]
+  }
+
+  async getCooldownList(userId) {
+    await db.query(
+      `UPDATE cool_down_entries SET status = 'expired', abandoned_at = datetime('now', '+8 hours')
+       WHERE user_id = $1 AND status = 'pending' AND datetime(deferred_until) < datetime('now', '+8 hours')`,
+      [userId]
+    )
+    const rows = await db.query(
+      `SELECT * FROM cool_down_entries WHERE user_id = $1 ORDER BY
+        CASE status WHEN 'pending' THEN 0 WHEN 'confirmed' THEN 1 WHEN 'abandoned' THEN 2 WHEN 'expired' THEN 3 END,
+        created_at DESC`,
+      [userId]
+    )
+    return rows.rows
+  }
+
+  async confirmCooldownEntry(userId, entryId) {
+    const entry = await db.query(
+      `UPDATE cool_down_entries SET status = 'confirmed', confirmed_at = datetime('now', '+8 hours')
+       WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING *`,
+      [entryId, userId]
+    )
+    if (!entry.rows.length) return { error: 'Entry not found or already processed' }
+    return entry.rows[0]
+  }
+
+  async abandonCooldownEntry(userId, entryId) {
+    const entry = await db.query(
+      `UPDATE cool_down_entries SET status = 'abandoned', abandoned_at = datetime('now', '+8 hours')
+       WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING *`,
+      [entryId, userId]
+    )
+    if (!entry.rows.length) return { error: 'Entry not found or already processed' }
+    return entry.rows[0]
+  }
+
+  async autoApplyDeferral(userId, amount, merchant, description) {
+    const prediction = await this.predictPurchaseImpact(userId, amount)
+    if (prediction.impact === 'critical' || prediction.impact === 'high') {
+      const entry = await this.addToCooldown(userId, merchant, amount, description, prediction.message)
+      return { deferred: true, entry, prediction }
+    }
+    return { deferred: false, prediction }
+  }
+
+  // === DYNAMIC BUDGET RESET ===
+
+  async applyBudgetReset(userId, overspentAmount) {
+    const settings = await db.query(
+      `SELECT * FROM autopilot_settings WHERE user_id = $1 AND is_active = 1`,
+      [userId]
+    )
+    if (!settings.rows.length) return { error: 'Autopilot not active' }
+
+    const s = settings.rows[0]
+    const currentDailyTotal = parseFloat(s.daily_spending_total || 0)
+    const reductionFactor = Math.min(0.5, Math.max(0.1, (parseFloat(overspentAmount || 0) / Math.max(currentDailyTotal, 1))))
+    const newDailyTotal = Math.round(currentDailyTotal * (1 - reductionFactor) * 100) / 100
+
+    await db.query(
+      `UPDATE autopilot_settings SET daily_spending_total = $1, updated_at = datetime('now') WHERE user_id = $2`,
+      [newDailyTotal, userId]
+    )
+
+    const oldDaily = currentDailyTotal / 30
+    const newDaily = newDailyTotal / 30
+
+    await nudgeEngine.createNudge(
+      userId, 'budget_reset',
+      'Budget Auto-Adjusted',
+      `Overspending detected. Daily limit reduced from RM${oldDaily.toFixed(0)} to RM${newDaily.toFixed(0)} for the rest of the month to protect your essentials.`,
+      { priority: 'high', context: { old_daily_total: currentDailyTotal, new_daily_total: newDailyTotal, overspent: overspentAmount } }
+    )
+
+    try {
+      const petEngine = require('./PetEngine')
+      await petEngine.triggerPetReaction(userId, 'budget_reset', { oldLimit: oldDaily.toFixed(0), newLimit: newDaily.toFixed(0) })
+    } catch (e) {}
+
+    return { oldDailyTotal: currentDailyTotal, newDailyTotal, oldDailyLimit: Number(oldDaily.toFixed(2)), newDailyLimit: Number(newDaily.toFixed(2)) }
+  }
+
+  async tryAutoBudgetReset(userId) {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' })
+    const dailyLog = await db.query(
+      `SELECT * FROM autopilot_daily_logs WHERE user_id = $1 AND log_date = $2`,
+      [userId, today]
+    )
+    if (!dailyLog.rows.length) return null
+
+    const log = dailyLog.rows[0]
+    const spent = parseFloat(log.spent || 0)
+    const limit = parseFloat(log.daily_limit || 0)
+    if (limit > 0 && spent > limit) {
+      const overspent = spent - limit
+      return await this.applyBudgetReset(userId, overspent)
+    }
+    return null
+  }
+
+  // === SAVINGS MULTIPLIER ADJUSTMENT ===
+
+  async adjustRoundUpMultiplier(userId, newMultiplier) {
+    const existing = await db.query(
+      `SELECT * FROM autosave_rules WHERE user_id = $1 AND rule_type = 'round_up' AND is_active = 1`,
+      [userId]
+    )
+    if (existing.rows.length) {
+      const oldMultiplier = parseFloat(existing.rows[0].roundup_multiplier || 1.0)
+      await db.query(
+        `UPDATE autosave_rules SET roundup_multiplier = $1, updated_at = datetime('now') WHERE id = $2`,
+        [newMultiplier, existing.rows[0].id]
+      )
+      await nudgeEngine.createNudge(
+        userId, 'multiplier_adjusted',
+        'Round-Up Multiplier Increased',
+        `Your round-up savings rate was boosted from ${oldMultiplier.toFixed(1)}x to ${newMultiplier.toFixed(1)}x to help rebuild your buffer faster.`,
+        { priority: 'normal', context: { old_multiplier: oldMultiplier, new_multiplier: newMultiplier } }
+      )
+      try {
+        const petEngine = require('./PetEngine')
+        await petEngine.triggerPetReaction(userId, 'multiplier_adjusted', { oldMul: oldMultiplier.toFixed(1), newMul: newMultiplier.toFixed(1) })
+      } catch (e) {}
+      return { oldMultiplier, newMultiplier }
+    }
+    return { error: 'No active round-up rule found' }
+  }
+
+  async tryAutoIncreaseMultiplier(userId) {
+    const risks = await this.detectDebtRisks(userId)
+    if (risks.length > 0) {
+      return await this.adjustRoundUpMultiplier(userId, 2.0)
+    }
+    return { noAction: true }
+  }
+
+  async tryAutoResetMultiplier(userId) {
+    const rules = await db.query(
+      `SELECT * FROM autosave_rules WHERE user_id = $1 AND rule_type = 'round_up' AND is_active = 1 AND roundup_multiplier > 1.0`,
+      [userId]
+    )
+    if (!rules.rows.length) return { noAction: true }
+    const daysSince = rules.rows.length ? Math.round((Date.now() - new Date(rules.rows[0].updated_at || rules.rows[0].created_at).getTime()) / (1000 * 60 * 60 * 24)) : 0
+    if (daysSince >= 7) {
+      return await this.adjustRoundUpMultiplier(userId, 1.0)
+    }
+    return { noAction: true, daysRemaining: 7 - daysSince }
+  }
+
+  // === ENHANCE BEFORE-SPEND ACTIONS ===
+
+  async getBeforeSpendActions(userId) {
+    const profile = await db.query(`SELECT * FROM autopilot_profiles WHERE user_id = $1`, [userId])
+    const activeMode = profile.rows[0]?.mode_key || 'first_salary_mode'
+    return [
+      { key: 'defer_purchase', label: 'Defer purchase for 48 hours', impact: 'Reduces impulse debt risk by ~20%' },
+      { key: 'reduce_category_cap', label: 'Reduce food/shopping cap by RM40', impact: 'Lowers projected shortfall this month' },
+      { key: 'increase_roundup', label: 'Increase round-up multiplier by 0.2x', impact: `Boosts micro-saving in ${activeMode}` },
+    ]
   }
 
   async computeRunwayBreakdown(userId) {

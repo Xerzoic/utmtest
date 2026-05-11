@@ -215,6 +215,13 @@ async function loadDashboard() {
     nudgesList.innerHTML = "<p class='empty-state'>No nudges yet</p>";
   }
 
+  if (data.streak) {
+    document.getElementById("savingsStreakCount").textContent = data.streak.current_streak || 0;
+    document.getElementById("savingsBestStreak").textContent = data.streak.longest_streak || 0;
+    renderSavingsStreakCalendar(data.streak);
+    checkStreakAnimation(data.streak);
+  }
+
   connectSocket();
   updateNudgeBadge();
   loadGamification();
@@ -910,47 +917,6 @@ function getCategoryEmoji(category) {
   return emojis[category] || "📌";
 }
 
-function openExpenseModal() {
-  document.getElementById("expenseModal").classList.add("open");
-  document.getElementById("expenseDate").value = malaysiaDate();
-  document.getElementById("expenseForm").reset();
-  document.getElementById("expenseDate").value = malaysiaDate();
-}
-
-async function submitExpense(e) {
-  e.preventDefault();
-  const amount = parseFloat(document.getElementById("expenseAmount").value);
-  const category = document.getElementById("expenseCategory").value;
-  const note = document.getElementById("expenseNote").value;
-  const expenditure_date = document.getElementById("expenseDate").value;
-
-  if (!amount || amount <= 0) { alert("Please enter a valid amount"); return; }
-  if (!category) { alert("Please select a category"); return; }
-
-  const data = await api("/expenditures", {
-    method: "POST",
-    body: JSON.stringify({ amount, category, note, expenditure_date }),
-  });
-
-  if (data) {
-    closeModal("expenseModal");
-    showNudgeToast({ title: "Expense Logged!", message: "RM " + amount.toFixed(2) + " recorded in " + category, priority: "normal" });
-    loadDashboard();
-    loadTodayExpenses();
-    loadAutopilot();
-    if (document.getElementById("roundUpPanel")?.classList.contains("open")) {
-      loadRoundUpStatus();
-    }
-    var roundUp = Math.ceil(amount) - amount;
-    if (roundUp >= 0.05) {
-      addPiggyBankRoundUp(roundUp, data.id || null, "Round-up from " + category);
-    }
-    recordAutopilotSpending(amount);
-  } else {
-    alert("Failed to log expense. Please try again.");
-  }
-}
-
 async function loadTodayExpenses() {
   const data = await api("/expenditures");
   if (!data) return;
@@ -1073,9 +1039,36 @@ function openSendMoneyModal() {
   document.getElementById("sendPhone").value = "";
   document.getElementById("sendAmount").value = "";
   document.getElementById("sendNote").value = "";
+  document.getElementById("sendCategory").value = "";
+  document.getElementById("sendDate").value = malaysiaDate();
+  document.getElementById("coolDownPredictArea").style.display = "none";
   document.getElementById("qrResult").textContent = "";
   document.getElementById("sendMoneyModal").classList.add("open");
   switchSendTab("phone");
+}
+
+function openProfileModal() {
+  var user = state.user;
+  if (!user) return;
+
+  var initials = (user.full_name || "?").substring(0, 2).toUpperCase();
+  document.getElementById("profileAvatarLarge").textContent = initials;
+  document.getElementById("profileName").textContent = user.full_name || "-";
+  document.getElementById("profileEmail").textContent = user.email || "-";
+  document.getElementById("profilePhone").textContent = user.phone || "-";
+  document.getElementById("profileIncome").textContent = "RM " + (user.monthly_income || 0).toLocaleString();
+  document.getElementById("profileAccount").textContent = user.gxbank_account_id || "-";
+  document.getElementById("profileRisk").textContent = user.risk_profile || "moderate";
+
+  api("/dashboard").then(function(data) {
+    if (!data) return;
+    document.getElementById("profileLevel").textContent = data.gamification?.level || 1;
+    document.getElementById("profileXP").textContent = data.gamification?.xp || 0;
+    document.getElementById("profileStreak").textContent = data.streak?.current_streak || 0;
+    document.getElementById("profileSavings").textContent = "RM " + (data.totalSavings || 0).toLocaleString();
+  });
+
+  document.getElementById("profileModal").classList.add("open");
 }
 
 function switchSendTab(tab) {
@@ -1126,25 +1119,103 @@ function stopQrScanner() {
   if (qrStream) { qrStream.getTracks().forEach(function(t) { t.stop(); }); qrStream = null; }
   document.getElementById("qrVideo").style.display = "none";
 }
+var lastCooldownPrediction = null;
+
+function onSendAmountChange() {
+  var amount = parseFloat(document.getElementById("sendAmount").value);
+  var area = document.getElementById("coolDownPredictArea");
+  var text = document.getElementById("coolDownPredictText");
+  var btn = document.getElementById("coolDownAddBtn");
+  if (!amount || amount <= 0) {
+    area.style.display = "none";
+    return;
+  }
+  api("/cool-down/predict", {
+    method: "POST",
+    body: JSON.stringify({ amount: amount })
+  }).then(function(prediction) {
+    if (!prediction) return;
+    lastCooldownPrediction = prediction;
+    area.style.display = "block";
+    text.textContent = prediction.message;
+    btn.style.display = (prediction.impact === "critical" || prediction.impact === "high") ? "inline-block" : "none";
+  });
+}
+
+function addToCooldownFromSend() {
+  var amount = parseFloat(document.getElementById("sendAmount").value);
+  var note = document.getElementById("sendNote").value || "Send money";
+  var phone = document.getElementById("sendPhone").value.trim();
+  var merchant = phone ? ("Send to " + phone) : note;
+  api("/cool-down/add", {
+    method: "POST",
+    body: JSON.stringify({
+      merchant: merchant,
+      amount: amount,
+      description: note,
+      predicted_impact: lastCooldownPrediction ? lastCooldownPrediction.message : "",
+    })
+  }).then(function(entry) {
+    if (entry && entry.id) {
+      showNudgeToast({ title: "Added to Cool-Down", message: "Revisit in 48h before deciding to spend RM" + amount, priority: "normal" });
+      closeModal("sendMoneyModal");
+    }
+  });
+}
+
 function handleSendMoney() {
   var phone = document.getElementById("sendPhone").value.trim();
   var amount = parseFloat(document.getElementById("sendAmount").value);
+  var category = document.getElementById("sendCategory").value;
+  var sendDate = document.getElementById("sendDate").value || malaysiaDate();
+
   if (!phone) { alert("Please enter a phone number or scan a QR code"); return; }
   if (!amount || amount <= 0) { alert("Please enter a valid amount"); return; }
+
   var note = document.getElementById("sendNote").value || ("Sent to " + phone);
-  api("/transactions", {
-    method: "POST",
-    body: JSON.stringify({ amount: amount, type: "debit", merchant: note, category: "transfer", description: "Send to " + phone + (note ? " - " + note : ""), transaction_date: malaysiaDate() })
-  }).then(function(resp) {
-    if (resp && resp.error) { alert("Error: " + resp.error); return; }
-    if (resp && (resp.id || resp._status === 201)) {
-      closeModal("sendMoneyModal");
-      loadSavings();
-      loadTodayExpenses();
-    } else {
-      alert("Failed to send money. Server returned: " + JSON.stringify(resp));
-    }
-  });
+
+  if (category) {
+    api("/expenditures", {
+      method: "POST",
+      body: JSON.stringify({
+        amount: amount,
+        category: category,
+        note: note,
+        expenditure_date: sendDate,
+        merchant: "Send to " + phone,
+      })
+    }).then(function(resp) {
+      if (resp && resp.error) { alert("Error: " + resp.error); return; }
+      if (resp && resp.id) {
+        closeModal("sendMoneyModal");
+        showNudgeToast({ title: "Sent & Logged!", message: "RM " + amount.toFixed(2) + " to " + phone + " (" + category + ")", priority: "normal" });
+        loadDashboard();
+        loadTodayExpenses();
+        loadAutopilot();
+        var roundUp = Math.ceil(amount) - amount;
+        if (roundUp >= 0.05) {
+          addPiggyBankRoundUp(roundUp, resp.id || null, "Round-up from " + category);
+        }
+        recordAutopilotSpending(amount);
+      } else {
+        alert("Failed to send money. Server returned: " + JSON.stringify(resp));
+      }
+    });
+  } else {
+    api("/transactions", {
+      method: "POST",
+      body: JSON.stringify({ amount: amount, type: "debit", merchant: note, category: "transfer", description: "Send to " + phone + (note ? " - " + note : ""), transaction_date: sendDate })
+    }).then(function(resp) {
+      if (resp && resp.error) { alert("Error: " + resp.error); return; }
+      if (resp && (resp.id || resp._status === 201)) {
+        closeModal("sendMoneyModal");
+        loadSavings();
+        loadTodayExpenses();
+      } else {
+        alert("Failed to send money. Server returned: " + JSON.stringify(resp));
+      }
+    });
+  }
 }
 
 function openFixedExpensesModal() {
@@ -1787,13 +1858,21 @@ async function loadCommitmentContracts() {
     return;
   }
   list.innerHTML = data.map(function(c) {
+    var target = parseFloat(c.target_value || 0).toFixed(2);
+    var stake = parseFloat(c.stake_amount || 0).toFixed(2);
+    var lockInfo = "";
+    if (c.stake_locked_until && c.status === "failed") {
+      lockInfo = "<p class='lock-notice'>Stake locked in emergency fund until " + c.stake_locked_until + "</p>";
+    }
+    var autoBadge = c.auto_verified ? "<span class='auto-badge'>Auto-Verified</span>" : "";
     return "<div class='group-card'>" +
-      "<h3>" + c.contract_type + "</h3>" +
-      "<p>Target: RM" + parseFloat(c.target_value || 0).toFixed(2) + "</p>" +
-      "<p>Stake: RM" + parseFloat(c.stake_amount || 0).toFixed(2) + "</p>" +
-      "<p>Status: " + c.status + "</p>" +
+      "<h3>" + c.contract_type + " " + autoBadge + "</h3>" +
+      "<p>Target: RM" + target + " | Stake: RM" + stake + "</p>" +
+      "<p>Status: " + c.status + (c.due_date ? " | Due: " + c.due_date : "") + "</p>" +
+      lockInfo +
       "<div class='group-card-actions'>" +
-        "<button class='btn-secondary btn-sm' onclick='resolveContract(\"" + c.id + "\", \"completed\")'>Mark Complete</button>" +
+        (c.status === "active" ? "<button class='btn-secondary btn-sm' onclick='resolveContract(\"" + c.id + "\", \"completed\")'>Mark Complete</button> " : "") +
+        (c.status === "active" ? "<button class='btn-danger btn-sm' onclick='resolveContract(\"" + c.id + "\", \"failed\")'>Mark Failed</button>" : "") +
       "</div>" +
     "</div>";
   }).join("");
@@ -1823,14 +1902,106 @@ async function createSampleCommitment() {
 }
 
 async function resolveContract(contractId, status) {
-  await api("/commitment-contracts/" + contractId + "/resolve", {
+  var result = await api("/commitment-contracts/" + contractId + "/resolve", {
     method: "PATCH",
     body: JSON.stringify({
       status: status,
       resolution_note: status === "completed" ? "Target met in demo flow" : "Missed target in demo flow",
     }),
   });
+  if (result && result.redirect_goal_id) {
+    showNudgeToast({ title: "Stake Redirected", message: "RM went to emergency fund (locked 30 days)", priority: "normal" });
+  }
   loadCommitmentContracts();
+}
+
+async function acceptContractRec(recommendation) {
+  var data = await api("/commitment-contracts/recommendations/accept", {
+    method: "POST",
+    body: JSON.stringify(recommendation),
+  });
+  if (data && data.id) {
+    showNudgeToast({ title: "Contract Created!", message: recommendation.label + " is now active", priority: "normal" });
+    loadCommitmentContracts();
+  } else if (data && data.error) {
+    showNudgeToast({ title: "Error", message: data.error, priority: "high" });
+  }
+}
+
+async function checkExpiringContracts() {
+  var data = await api("/commitment-contracts/check-expiry", { method: "POST" });
+  if (data && data.checked > 0) {
+    showNudgeToast({ title: "Pet Notified", message: data.checked + " expiring contract(s) triggered pet distress", priority: "normal" });
+  }
+}
+
+async function runAutoArbitration() {
+  var data = await api("/commitment-contracts/auto-arbitrate", { method: "POST" });
+  if (data && data.length) {
+    var completed = data.filter(function(r) { return r.autoCompleted; }).length;
+    var failed = data.filter(function(r) { return r.autoFailed; }).length;
+    showNudgeToast({ title: "Auto-Arbitration Done", message: completed + " verified, " + failed + " failed", priority: "normal" });
+    loadCommitmentContracts();
+  }
+}
+
+async function loadCooldownList() {
+  var data = await api("/cool-down/list");
+  var list = document.getElementById("coolDownList");
+  if (!list) return;
+  if (!data || !data.length) {
+    list.innerHTML = "<p class='empty-state'>No deferred purchases yet.</p>";
+    return;
+  }
+  list.innerHTML = data.map(function(e) {
+    return "<div class='group-card'>" +
+      "<div class='cool-down-header'>" +
+        "<span class='cool-down-merchant'>" + (e.merchant || "Purchase") + "</span>" +
+        "<span class='cool-down-status cool-down-" + e.status + "'>" + e.status + "</span>" +
+      "</div>" +
+      "<p>Amount: RM" + parseFloat(e.amount).toFixed(2) + "</p>" +
+      "<p class='cool-down-impact'>" + (e.predicted_impact || "") + "</p>" +
+      "<p class='cool-down-expiry'><small>Deferred until: " + e.deferred_until + "</small></p>" +
+      (e.status === "pending"
+        ? "<div class='group-card-actions'>" +
+          "<button class='btn-primary btn-sm' onclick='confirmCooldown(\"" + e.id + "\")'>Confirm & Send</button>" +
+          "<button class='btn-danger btn-sm' onclick='abandonCooldown(\"" + e.id + "\")'>Abandon</button>" +
+        "</div>"
+        : "") +
+    "</div>";
+  }).join("");
+}
+
+async function confirmCooldown(entryId) {
+  var result = await api("/cool-down/" + entryId + "/confirm", { method: "POST" });
+  if (result && !result.error) {
+    showNudgeToast({ title: "Purchase Confirmed", message: "You decided to proceed. Money sent.", priority: "normal" });
+    loadCooldownList();
+  }
+}
+
+async function abandonCooldown(entryId) {
+  var result = await api("/cool-down/" + entryId + "/abandon", { method: "POST" });
+  if (result && !result.error) {
+    showNudgeToast({ title: "Purchase Abandoned", message: "Good call! You saved money by waiting.", priority: "normal" });
+    loadCooldownList();
+  }
+}
+
+async function triggerAutoBudgetReset() {
+  var result = await api("/interventions/auto-budget-reset", { method: "POST" });
+  if (result && result.newDailyTotal) {
+    showNudgeToast({ title: "Budget Reset Applied", message: "Daily limit reduced from RM" + result.oldDailyLimit + " to RM" + result.newDailyLimit, priority: "high" });
+    loadAutopilot();
+  }
+}
+
+async function triggerAutoMultiplierIncrease() {
+  var result = await api("/interventions/auto-increase-multiplier", { method: "POST" });
+  if (result && result.newMultiplier) {
+    showNudgeToast({ title: "Round-Up Boosted", message: "Multiplier increased from " + result.oldMultiplier + "x to " + result.newMultiplier + "x", priority: "normal" });
+    loadAutopilot();
+  }
 }
 
 async function openGroupDetail(groupId) {
@@ -2132,6 +2303,21 @@ async function refreshResilience() {
       runwayDetail +
     "</div>";
   drawVolatilityWave(volatility);
+
+  // Load contract recommendations asynchronously
+  api("/commitment-contracts/recommendations").then(function(recs) {
+    if (!recs || !recs.length) return;
+    var recEl = document.createElement("div");
+    recEl.className = "contract-recommendations";
+    recEl.innerHTML = "<p><strong>Recommended Contracts:</strong></p>" +
+      recs.map(function(r) {
+        return "<div class='contract-rec-item'>" +
+          "<span>" + r.label + " <small>(" + r.reason.substring(0, 50) + "...)</small></span>" +
+          "<button class='btn-primary btn-sm' onclick='acceptContractRec(" + JSON.stringify(r).replace(/"/g, "'") + ")'>Accept</button>" +
+        "</div>";
+      }).join("");
+    card.appendChild(recEl);
+  });
 }
 
 function toggleRunwayBreakdown() {
