@@ -163,7 +163,36 @@ async function seed() {
         [uid(), ...t]
       )
     }
-    console.log(`  Seeded ${txns.length} transactions`)
+    
+    // Add daily expenses for the last 30 days for u1
+    const currentDate = new Date();
+    for (let i = 30; i >= 0; i--) {
+      const date = new Date(currentDate);
+      date.setDate(date.getDate() - i);
+      const dateString = date.toISOString().split('T')[0];
+      
+      // Breakfast / Coffee
+      await db.query(
+        `INSERT INTO transactions (id, user_id, gxbank_txn_id, amount, type, category, merchant, description, transaction_date, is_recurring)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [uid(), u1.id, `TXN-DAILY-${dateString}-1`, Math.floor(Math.random() * 10) + 5, 'debit', 'food', 'Local Cafe', 'Morning Coffee & Pastry', `${dateString}T08:00:00`, 0]
+      );
+
+      // Lunch
+      await db.query(
+        `INSERT INTO transactions (id, user_id, gxbank_txn_id, amount, type, category, merchant, description, transaction_date, is_recurring)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [uid(), u1.id, `TXN-DAILY-${dateString}-2`, Math.floor(Math.random() * 15) + 10, 'debit', 'food', 'Food Court', 'Lunch', `${dateString}T13:00:00`, 0]
+      );
+      
+      // Transport
+      await db.query(
+        `INSERT INTO transactions (id, user_id, gxbank_txn_id, amount, type, category, merchant, description, transaction_date, is_recurring)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [uid(), u1.id, `TXN-DAILY-${dateString}-3`, Math.floor(Math.random() * 10) + 5, 'debit', 'transport', 'MRT / LRT', 'Public Transport', `${dateString}T18:00:00`, 0]
+      );
+    }
+    console.log(`  Seeded ${txns.length} manual transactions and 90 daily expenses`)
 
     await db.query(
       `INSERT INTO autosave_rules (id, user_id, rule_type, is_active, config, total_saved)
