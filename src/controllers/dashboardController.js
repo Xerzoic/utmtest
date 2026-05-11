@@ -4,6 +4,7 @@ const nudgeEngine = require('../services/NudgeEngine')
 const autoSaveEngine = require('../services/AutoSaveEngine')
 const gamificationEngine = require('../services/GamificationEngine')
 const resilienceEngine = require('../services/ResilienceEngine')
+const petEngine = require('../services/PetEngine')
 
 function myDate(offsetDays) {
   var d = new Date();
@@ -510,6 +511,33 @@ class DashboardController {
       if (badgeEarned?.length > 0) {
         response.badgeEarned = badgeEarned[0]
       }
+
+      // Trigger pet reaction based on daily spending vs budget
+      try {
+        const today = myDate()
+        const dailyLog = await db.query(
+          `SELECT * FROM autopilot_daily_logs WHERE user_id = $1 AND log_date = $2`, [userId, today]
+        )
+        if (dailyLog.rows.length) {
+          const spent = parseFloat(dailyLog.rows[0].spent || 0)
+          const limit = parseFloat(dailyLog.rows[0].daily_limit || 0)
+          if (limit > 0 && spent > limit) {
+            await petEngine.triggerPetReaction(userId, 'overspend', { over: (spent - limit).toFixed(2) })
+          }
+        }
+        // Check budget warning for this category
+        const budgetCheck = await db.query(
+          `SELECT monthly_limit, current_spent FROM budgets WHERE user_id = $1 AND category = $2 AND period_month = $3 AND period_year = $4`,
+          [userId, category, month, year]
+        )
+        if (budgetCheck.rows.length) {
+          const b = budgetCheck.rows[0]
+          const pct = b.monthly_limit > 0 ? Math.round((b.current_spent / b.monthly_limit) * 100) : 0
+          if (pct >= 80) {
+            await petEngine.triggerPetReaction(userId, 'budget_warning', { category, percent: pct })
+          }
+        }
+      } catch (petErr) { /* Pet errors should not block expense logging */ }
 
       res.status(201).json(response)
     } catch (error) { res.status(500).json({ error: error.message }) }
@@ -1173,6 +1201,62 @@ class DashboardController {
       )
 
       res.json({ success: true, total: parseFloat(total.rows[0].total) })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  // === PET SYSTEM ===
+  async getPetStatus(req, res) {
+    try {
+      const userId = req.user.id
+      // Also calculate EP on each status fetch
+      await petEngine.calculateDailyEP(userId)
+      await petEngine.generateMorningDialogue(userId)
+      const status = await petEngine.getPetStatus(userId)
+      res.json(status)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async calculatePetEP(req, res) {
+    try {
+      const userId = req.user.id
+      const result = await petEngine.calculateDailyEP(userId)
+      res.json(result)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async dismissPetDialogue(req, res) {
+    try {
+      const userId = req.user.id
+      const { dialogueId } = req.params
+      const result = await petEngine.dismissDialogue(userId, dialogueId)
+      res.json(result)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async getPetRewards(req, res) {
+    try {
+      const userId = req.user.id
+      const petState = await petEngine.ensurePetState(userId)
+      const rewards = await petEngine._getRewards(userId, petState.stage)
+      res.json(rewards)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async claimPetReward(req, res) {
+    try {
+      const userId = req.user.id
+      const { rewardId } = req.params
+      const result = await petEngine.claimReward(userId, rewardId)
+      if (result.error) return res.status(400).json(result)
+      res.json(result)
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async getPetHistory(req, res) {
+    try {
+      const userId = req.user.id
+      const history = await petEngine.getEPHistory(userId)
+      res.json(history)
     } catch (error) { res.status(500).json({ error: error.message }) }
   }
 }

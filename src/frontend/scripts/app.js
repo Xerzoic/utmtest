@@ -1,4 +1,4 @@
-﻿const API_BASE = "/api";
+const API_BASE = "/api";
 const AUTH_BASE = "/auth";
 function malaysiaDate(offsetDays) {
   var d = new Date();
@@ -219,6 +219,7 @@ async function loadDashboard() {
   updateNudgeBadge();
   loadGamification();
   loadTodayExpenses();
+  loadPetStatus();
 }
 
 async function loadSavings() {
@@ -1262,23 +1263,28 @@ function saveAutopilotSetup() {
       fixedBillsMonthly: bills
     })
   }).then(function(resp) {
-    if (resp && resp.error) { alert("Error: " + resp.error); return; }
+    if (!resp) { alert("Failed to connect to server"); return; }
+    if (resp.error) { alert("Error: " + resp.error); return; }
     closeModal("autopilotSetupModal");
+    showNudgeToast({ title: "Autopilot Activated!", message: "Your savings plan is now running.", priority: "normal" });
     loadAutopilot();
-    loadSavings();
+    showTab("goals");
   });
 }
 
 function toggleAutopilot() {
   api("/autopilot/status").then(function(data) {
     if (!data) return;
-    var isActive = data.settings ? !data.settings.is_active : false;
     if (!data.settings) { openAutopilotSetup(); return; }
+    var isActive = data.settings.is_active ? false : true;
     api("/autopilot/toggle", {
       method: "PATCH",
       body: JSON.stringify({ isActive: isActive })
     }).then(function(resp) {
-      if (resp && resp.success) loadAutopilot();
+      if (resp && resp.success) {
+        loadAutopilot();
+        if (!isActive) showNudgeToast({ title: "Autopilot Paused", message: "Your savings plan has been paused.", priority: "normal" });
+      }
     });
   });
 }
@@ -2128,6 +2134,202 @@ async function sendAIChat() {
     messages.innerHTML += "<div class='chat-msg'><div class='chat-msg-bubble'>Sorry, I'm having trouble. Please try again.</div></div>";
   }
   messages.scrollTop = messages.scrollHeight;
+}
+
+// ===== PET SYSTEM =====
+var _currentPetDialogueId = null;
+
+async function loadPetStatus() {
+  var data = await api("/pet/status");
+  if (!data) return;
+  renderPet(data);
+}
+
+function renderPet(data) {
+  var widget = document.getElementById("petWidget");
+  if (!widget) return;
+
+  // Set mood class on widget
+  widget.className = "pet-widget mood-" + data.mood;
+
+  // Update HP bar
+  var hpFill = document.getElementById("petHpFill");
+  var hpLabel = document.getElementById("petHpLabel");
+  hpFill.style.width = data.hp + "%";
+  hpFill.className = "pet-hp-fill" + (data.hp >= 60 ? " hp-high" : data.hp >= 40 ? " hp-mid" : " hp-low");
+  hpLabel.textContent = data.hp + " HP";
+
+  // Update mood emoji
+  document.getElementById("petMoodEmoji").textContent = data.moodEmoji || "😊";
+
+  // Update EP bar
+  var stageBadge = document.getElementById("petStageBadge");
+  var epFill = document.getElementById("petEpFill");
+  var epText = document.getElementById("petEpText");
+  var stageIcons = { seedling: "🌱", growing: "🌿", matured: "🌳" };
+  var stageNames = { seedling: "Seedling", growing: "Growing", matured: "Fully Matured" };
+  stageBadge.textContent = (stageIcons[data.stage] || "🌱") + " " + (stageNames[data.stage] || "Seedling");
+  epFill.style.width = data.stageProgress + "%";
+  if (data.nextStageAt) {
+    epText.textContent = data.evolutionPoints + " / " + data.nextStageAt + " EP";
+  } else {
+    epText.textContent = data.evolutionPoints + " EP ✨ MAX";
+  }
+
+  // Switch SVG stage
+  var stages = ["petSeedling", "petGrowing", "petMatured"];
+  var stageMap = { seedling: "petSeedling", growing: "petGrowing", matured: "petMatured" };
+  stages.forEach(function(s) {
+    var el = document.getElementById(s);
+    if (el) el.style.display = s === stageMap[data.stage] ? "block" : "none";
+  });
+
+  // Set SVG animation class based on mood
+  var svg = document.getElementById("petSvg");
+  svg.className.baseVal = "pet-svg";
+  if (data.mood === "thriving" || data.mood === "happy") {
+    svg.classList.add("pet-happy");
+  } else if (data.mood === "weak") {
+    svg.classList.add("pet-weak");
+  } else if (data.mood === "critical") {
+    svg.classList.add("pet-critical");
+  }
+
+  // Sparkle effects for thriving
+  var sparkles = document.getElementById("petSparkles");
+  sparkles.innerHTML = "";
+  if (data.mood === "thriving") {
+    createPetSparkles(sparkles);
+  }
+
+  // Rain effects for weak/critical
+  var rain = document.getElementById("petRain");
+  rain.innerHTML = "";
+  if (data.mood === "weak" || data.mood === "critical") {
+    rain.style.display = "block";
+    createPetRain(rain);
+  } else {
+    rain.style.display = "none";
+  }
+
+  // Dialogue bubble
+  var dialogueArea = document.getElementById("petDialogueArea");
+  if (data.dialogue && data.dialogue.message) {
+    dialogueArea.style.display = "block";
+    document.getElementById("petSpeechText").textContent = data.dialogue.message;
+    _currentPetDialogueId = data.dialogue.id;
+  } else {
+    dialogueArea.style.display = "none";
+    _currentPetDialogueId = null;
+  }
+
+  // Rewards peek
+  var rewardsPeek = document.getElementById("petRewardsPeek");
+  if (data.rewards && data.rewards.length > 0) {
+    var available = data.rewards.filter(function(r) { return r.status === "available"; });
+    if (available.length > 0) {
+      rewardsPeek.style.display = "flex";
+      document.getElementById("petRewardsText").textContent = available.length + " reward" + (available.length > 1 ? "s" : "") + " available!";
+    } else {
+      rewardsPeek.style.display = "none";
+    }
+  } else {
+    rewardsPeek.style.display = "none";
+  }
+}
+
+function createPetSparkles(container) {
+  var colors = ["#fbbf24", "#00d4aa", "#a855f7", "#f472b6"];
+  for (var i = 0; i < 6; i++) {
+    var sparkle = document.createElement("div");
+    sparkle.className = "pet-sparkle";
+    sparkle.style.left = (15 + Math.random() * 70) + "%";
+    sparkle.style.top = (20 + Math.random() * 60) + "%";
+    sparkle.style.background = colors[Math.floor(Math.random() * colors.length)];
+    sparkle.style.animationDelay = (Math.random() * 2) + "s";
+    sparkle.style.animationDuration = (1.5 + Math.random() * 1) + "s";
+    sparkle.style.animationIterationCount = "infinite";
+    container.appendChild(sparkle);
+  }
+}
+
+function createPetRain(container) {
+  for (var i = 0; i < 8; i++) {
+    var drop = document.createElement("div");
+    drop.className = "pet-raindrop";
+    drop.style.left = (10 + Math.random() * 80) + "%";
+    drop.style.animationDelay = (Math.random() * 1) + "s";
+    drop.style.animationDuration = (0.8 + Math.random() * 0.6) + "s";
+    container.appendChild(drop);
+  }
+}
+
+async function dismissPetDialogue() {
+  if (!_currentPetDialogueId) return;
+  await api("/pet/dismiss-dialogue/" + _currentPetDialogueId, { method: "POST" });
+  document.getElementById("petDialogueArea").style.display = "none";
+  _currentPetDialogueId = null;
+}
+
+function openPetRewards() {
+  api("/pet/rewards").then(function(rewards) {
+    if (!rewards || !rewards.length) {
+      showNudgeToast({ title: "No Rewards", message: "Keep nurturing GüGü to unlock rewards!", priority: "normal" });
+      return;
+    }
+    var available = rewards.filter(function(r) { return r.status === "available"; });
+    var claimed = rewards.filter(function(r) { return r.status === "claimed"; });
+    var html = "<h2>🎁 GüGü Rewards</h2>";
+    if (available.length > 0) {
+      html += "<h3 style='margin:12px 0 8px;font-size:14px;color:var(--primary)'>Available</h3>";
+      available.forEach(function(r) {
+        var icon = r.reward_type === "grab_voucher" ? "🚗" : r.reward_type === "shopee_voucher" ? "🛍️" : r.reward_type === "pockets_boost" ? "💰" : "🎁";
+        html += "<div class='nudge-item' style='cursor:pointer' onclick='claimPetReward(\"" + r.id + "\")'>" +
+          "<span class='nudge-icon'>" + icon + "</span>" +
+          "<div class='nudge-content'>" +
+            "<p class='nudge-title'>" + r.reward_type.replace(/_/g, " ").toUpperCase() + "</p>" +
+            "<p class='nudge-text'>" + r.reward_value + " • Tier " + r.reward_tier + "</p>" +
+            "<p class='nudge-text' style='color:var(--primary)'>Tap to claim</p>" +
+          "</div>" +
+        "</div>";
+      });
+    }
+    if (claimed.length > 0) {
+      html += "<h3 style='margin:12px 0 8px;font-size:14px;color:var(--text-secondary)'>Claimed</h3>";
+      claimed.forEach(function(r) {
+        html += "<div class='nudge-item' style='opacity:0.6'>" +
+          "<div class='nudge-content'>" +
+            "<p class='nudge-title'>" + r.reward_type.replace(/_/g, " ").toUpperCase() + " ✅</p>" +
+            "<p class='nudge-text'>" + r.reward_value + " • Code: " + (r.voucher_code || "N/A") + "</p>" +
+          "</div>" +
+        "</div>";
+      });
+    }
+    html += "<div class='modal-actions'><button class='btn-secondary' onclick='closeModal(\"petRewardsModal\")'>Close</button></div>";
+    var modal = document.getElementById("petRewardsModal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "petRewardsModal";
+      modal.className = "modal";
+      modal.innerHTML = "<div class='modal-content'>" + html + "</div>";
+      document.body.appendChild(modal);
+    } else {
+      modal.querySelector(".modal-content").innerHTML = html;
+    }
+    modal.classList.add("open");
+  });
+}
+
+async function claimPetReward(rewardId) {
+  var result = await api("/pet/rewards/" + rewardId + "/claim", { method: "POST" });
+  if (result && result.success) {
+    playSound("badge");
+    showNudgeToast({ title: "Reward Claimed! 🎉", message: "Check your rewards for the voucher code.", priority: "normal" });
+    openPetRewards();
+    loadPetStatus();
+  } else {
+    showNudgeToast({ title: "Claim Failed", message: result?.error || "Could not claim reward", priority: "high" });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);

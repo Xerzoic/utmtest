@@ -385,6 +385,58 @@ CREATE TABLE IF NOT EXISTS commitment_contracts (
   resolved_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_commitment_contracts_group ON commitment_contracts(group_id, status, due_date);
+
+-- Pet system tables
+CREATE TABLE IF NOT EXISTS pet_state (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  hp INTEGER NOT NULL DEFAULT 50,
+  evolution_points INTEGER NOT NULL DEFAULT 0,
+  stage TEXT NOT NULL DEFAULT 'seedling',
+  mood TEXT NOT NULL DEFAULT 'happy',
+  last_evolution_at TEXT,
+  active_days INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pet_dialogues (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  trigger_type TEXT NOT NULL,
+  message TEXT NOT NULL,
+  emotion TEXT NOT NULL DEFAULT 'neutral',
+  priority TEXT NOT NULL DEFAULT 'normal',
+  is_dismissed INTEGER NOT NULL DEFAULT 0,
+  dismissed_at TEXT,
+  expires_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pet_dialogues_user ON pet_dialogues(user_id, is_dismissed, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS pet_ep_log (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ep_date TEXT NOT NULL,
+  ep_earned INTEGER NOT NULL DEFAULT 0,
+  breakdown TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, ep_date)
+);
+
+CREATE TABLE IF NOT EXISTS pet_rewards (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reward_tier INTEGER NOT NULL DEFAULT 1,
+  reward_type TEXT NOT NULL,
+  reward_value TEXT,
+  voucher_code TEXT,
+  status TEXT NOT NULL DEFAULT 'available',
+  claimed_at TEXT,
+  redeemed_at TEXT,
+  expires_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pet_rewards_user ON pet_rewards(user_id, status);
 `
 
 module.exports = { SQL_SCHEMA: SQL_SCHEMA_PG }

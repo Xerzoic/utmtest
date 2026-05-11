@@ -16,7 +16,7 @@ for (const statement of statements) {
 
 function toSQLite(sql) {
   let result = sql
-    .replace(/\$([0-9]+)/g, '?')
+    .replace(/\$([0-9]+)/g, '?$1')
     .replace(/gen_random_uuid\(\)/g, "lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6)))")
 
   // Handle INTERVAL additions/subtractions with NOW() or CURRENT_DATE BEFORE replacing NOW()
@@ -49,27 +49,34 @@ function toSQLite(sql) {
 
 function sanitize(v) { return v === undefined ? null : v }
 
+function toBindings(params) {
+  const obj = {}
+  for (let i = 0; i < params.length; i++) {
+    obj[i + 1] = sanitize(params[i])
+  }
+  return obj
+}
+
 function query(sql, params = []) {
   const converted = toSQLite(sql)
   if (process.env.NODE_ENV === 'development') {
     console.log('SQL:', converted, 'Params:', params)
   }
-  params = params.map(sanitize)
   const trimmed = converted.trim().toUpperCase()
 
   if (trimmed.startsWith('SELECT') || trimmed.startsWith('WITH')) {
     const stmt = db.prepare(converted)
-    const rows = stmt.all(...(params || []))
+    const rows = stmt.all(toBindings(params))
     return Promise.resolve({ rows, rowCount: rows.length })
   }
 
   if (trimmed.startsWith('INSERT') || trimmed.startsWith('UPDATE') || trimmed.startsWith('DELETE')) {
     const stmt = db.prepare(converted)
     if (converted.toUpperCase().includes('RETURNING')) {
-      const rows = stmt.all(...(params || []))
+      const rows = stmt.all(toBindings(params))
       return Promise.resolve({ rows, rowCount: rows.length })
     }
-    const info = stmt.run(...(params || []))
+    const info = stmt.run(toBindings(params))
     return Promise.resolve({
       rows: [],
       rowCount: info.changes,
@@ -78,7 +85,7 @@ function query(sql, params = []) {
   }
 
   const stmt = db.prepare(converted)
-  const info = stmt.run(...(params || []))
+  const info = stmt.run(toBindings(params))
   return Promise.resolve({ rows: [], rowCount: info.changes })
 }
 

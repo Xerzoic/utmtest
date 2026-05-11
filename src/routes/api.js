@@ -82,4 +82,12 @@ router.delete('/groups/:groupId/leave', dashboardController.leaveGroup)
 router.delete('/goals/:goalId', dashboardController.deleteGoal)
 router.delete('/autosave/rules/:ruleId', dashboardController.deleteAutoSaveRule)
 
+// Pet system
+router.get('/pet/status', dashboardController.getPetStatus)
+router.post('/pet/calculate-ep', dashboardController.calculatePetEP)
+router.post('/pet/dismiss-dialogue/:dialogueId', dashboardController.dismissPetDialogue)
+router.get('/pet/rewards', dashboardController.getPetRewards)
+router.post('/pet/rewards/:rewardId/claim', dashboardController.claimPetReward)
+router.get('/pet/history', dashboardController.getPetHistory)
+
 module.exports = router

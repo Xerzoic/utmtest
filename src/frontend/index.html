@@ -123,6 +123,106 @@
             </div>
           </section>
 
+          <section class="pet-widget" id="petWidget">
+            <div class="pet-widget-inner">
+              <div class="pet-stage-area">
+                <div class="pet-character" id="petCharacter">
+                  <div class="pet-glow" id="petGlow"></div>
+                  <div class="pet-body" id="petBody">
+                    <svg id="petSvg" viewBox="0 0 120 120" class="pet-svg">
+                      <!-- Seedling stage (default) -->
+                      <g id="petSeedling" class="pet-stage-svg">
+                        <ellipse cx="60" cy="108" rx="22" ry="6" fill="#1a2340" opacity="0.5"/>
+                        <rect x="46" y="85" rx="8" ry="8" width="28" height="28" fill="#8B5E3C"/>
+                        <rect x="48" y="87" rx="6" ry="6" width="24" height="24" fill="#A0522D"/>
+                        <line x1="60" y1="87" x2="60" y2="55" stroke="#4ade80" stroke-width="4" stroke-linecap="round"/>
+                        <ellipse cx="50" cy="62" rx="10" ry="6" fill="#4ade80" transform="rotate(-30 50 62)"/>
+                        <ellipse cx="70" cy="58" rx="10" ry="6" fill="#22c55e" transform="rotate(25 70 58)"/>
+                        <circle cx="54" cy="50" r="2.5" fill="#1a1a2e" id="petEyeL"/>
+                        <circle cx="66" cy="50" r="2.5" fill="#1a1a2e" id="petEyeR"/>
+                        <path d="M56 55 Q60 58 64 55" stroke="#1a1a2e" stroke-width="1.5" fill="none" stroke-linecap="round" id="petMouth"/>
+                      </g>
+                      <!-- Growing stage -->
+                      <g id="petGrowing" class="pet-stage-svg" style="display:none">
+                        <ellipse cx="60" cy="112" rx="28" ry="7" fill="#1a2340" opacity="0.5"/>
+                        <rect x="40" y="88" rx="10" ry="10" width="40" height="30" fill="#8B5E3C"/>
+                        <rect x="43" y="90" rx="8" ry="8" width="34" height="26" fill="#A0522D"/>
+                        <line x1="60" y1="88" x2="60" y2="38" stroke="#4ade80" stroke-width="5" stroke-linecap="round"/>
+                        <line x1="60" y1="68" x2="42" y2="52" stroke="#4ade80" stroke-width="3.5" stroke-linecap="round"/>
+                        <line x1="60" y1="58" x2="78" y2="45" stroke="#4ade80" stroke-width="3.5" stroke-linecap="round"/>
+                        <ellipse cx="38" cy="48" rx="12" ry="7" fill="#22c55e" transform="rotate(-20 38 48)"/>
+                        <ellipse cx="82" cy="42" rx="12" ry="7" fill="#4ade80" transform="rotate(15 82 42)"/>
+                        <ellipse cx="55" cy="33" rx="10" ry="6" fill="#22c55e" transform="rotate(-10 55 33)"/>
+                        <ellipse cx="68" cy="30" rx="10" ry="6" fill="#16a34a" transform="rotate(20 68 30)"/>
+                        <circle cx="53" cy="38" r="3" fill="#1a1a2e"/>
+                        <circle cx="67" cy="38" r="3" fill="#1a1a2e"/>
+                        <path d="M55 44 Q60 48 65 44" stroke="#1a1a2e" stroke-width="2" fill="none" stroke-linecap="round"/>
+                      </g>
+                      <!-- Matured stage -->
+                      <g id="petMatured" class="pet-stage-svg" style="display:none">
+                        <ellipse cx="60" cy="115" rx="32" ry="8" fill="#1a2340" opacity="0.5"/>
+                        <rect x="36" y="90" rx="12" ry="12" width="48" height="30" fill="#8B5E3C"/>
+                        <rect x="39" y="92" rx="10" ry="10" width="42" height="26" fill="#A0522D"/>
+                        <line x1="60" y1="90" x2="60" y2="22" stroke="#4ade80" stroke-width="6" stroke-linecap="round"/>
+                        <line x1="60" y1="72" x2="35" y2="52" stroke="#22c55e" stroke-width="4" stroke-linecap="round"/>
+                        <line x1="60" y1="55" x2="85" y2="38" stroke="#22c55e" stroke-width="4" stroke-linecap="round"/>
+                        <line x1="60" y1="42" x2="38" y2="28" stroke="#16a34a" stroke-width="3.5" stroke-linecap="round"/>
+                        <line x1="60" y1="35" x2="80" y2="22" stroke="#16a34a" stroke-width="3.5" stroke-linecap="round"/>
+                        <circle cx="30" cy="48" r="12" fill="#22c55e"/>
+                        <circle cx="88" cy="34" r="12" fill="#4ade80"/>
+                        <circle cx="34" cy="24" r="10" fill="#16a34a"/>
+                        <circle cx="82" cy="18" r="10" fill="#22c55e"/>
+                        <circle cx="60" cy="15" r="11" fill="#4ade80"/>
+                        <circle cx="44" cy="38" r="4" fill="#fbbf24"/>
+                        <circle cx="76" cy="26" r="4" fill="#f472b6"/>
+                        <circle cx="60" cy="8" r="4" fill="#fbbf24"/>
+                        <circle cx="52" cy="28" r="3.5" fill="#00d4aa"/>
+                        <circle cx="50" cy="20" r="4" fill="#1a1a2e"/>
+                        <circle cx="70" cy="20" r="4" fill="#1a1a2e"/>
+                        <circle cx="51" cy="19" r="1.5" fill="#ffffff"/>
+                        <circle cx="71" cy="19" r="1.5" fill="#ffffff"/>
+                        <path d="M54 26 Q60 31 66 26" stroke="#1a1a2e" stroke-width="2" fill="none" stroke-linecap="round"/>
+                        <text x="60" y="5" text-anchor="middle" font-size="8" fill="#fbbf24">👑</text>
+                      </g>
+                    </svg>
+                    <div class="pet-sparkles" id="petSparkles"></div>
+                    <div class="pet-rain" id="petRain" style="display:none"></div>
+                  </div>
+                </div>
+                <div class="pet-info-side">
+                  <div class="pet-name-row">
+                    <span class="pet-name">GüGü</span>
+                    <span class="pet-mood-emoji" id="petMoodEmoji">😊</span>
+                  </div>
+                  <div class="pet-hp-bar-wrap">
+                    <div class="pet-hp-bar">
+                      <div class="pet-hp-fill" id="petHpFill" style="width:50%"></div>
+                    </div>
+                    <span class="pet-hp-label" id="petHpLabel">50 HP</span>
+                  </div>
+                  <div class="pet-ep-bar-wrap">
+                    <span class="pet-stage-badge" id="petStageBadge">🌱 Seedling</span>
+                    <div class="pet-ep-bar">
+                      <div class="pet-ep-fill" id="petEpFill" style="width:0%"></div>
+                    </div>
+                    <span class="pet-ep-text" id="petEpText">0 / 100 EP</span>
+                  </div>
+                </div>
+              </div>
+              <div class="pet-dialogue-area" id="petDialogueArea" style="display:none">
+                <div class="pet-speech-bubble">
+                  <p class="pet-speech-text" id="petSpeechText"></p>
+                  <button class="pet-speech-dismiss" id="petSpeechDismiss" onclick="dismissPetDialogue()">✕</button>
+                </div>
+              </div>
+              <div class="pet-rewards-peek" id="petRewardsPeek" style="display:none">
+                <span class="pet-rewards-icon">🎁</span>
+                <span class="pet-rewards-text" id="petRewardsText">Rewards available!</span>
+                <button class="btn-secondary btn-sm" onclick="openPetRewards()">View</button>
+              </div>
+            </div>
+          </section>
+
           <section class="streak-card">
             <div class="streak-visual">
               <div class="streak-fire">🔥</div>
@@ -780,6 +880,8 @@
             <button type="button" class="btn-primary" onclick="handleSendMoney()">Send</button>
           </div>
         </div>
+      </div>
+
       <div id="fixedExpensesModal" class="modal">
         <div class="modal-content modal-content-wide">
           <h2>📋 Fixed Expenses</h2>
