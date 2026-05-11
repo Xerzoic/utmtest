@@ -288,7 +288,7 @@
                     <span class="money-action-icon">💸</span>
                     <span class="money-action-label">Send</span>
                   </button>
-                  <button class="money-action" onclick="alert('Receive Money — coming soon')">
+                  <button class="money-action" onclick="openReceiveModal()">
                     <span class="money-action-icon">📥</span>
                     <span class="money-action-label">Receive</span>
                   </button>
@@ -882,6 +882,32 @@
         </div>
       </div>
 
+      <div id="receiveMoneyModal" class="modal">
+        <div class="modal-content receive-modal-content">
+          <h2>📥 Receive Money</h2>
+          <p class="receive-desc">Share your details to receive money</p>
+          <div class="receive-qr-section">
+            <div class="receive-qr-container">
+              <div id="receiveQrCode"></div>
+            </div>
+            <div class="receive-details">
+              <label>Your Phone Number</label>
+              <div class="receive-phone-row">
+                <span id="receivePhoneDisplay" class="receive-phone-text">-</span>
+                <button class="btn-icon" onclick="copyReceiveInfo()" title="Copy">📋</button>
+              </div>
+              <label>Account</label>
+              <div class="receive-account-row">
+                <span id="receiveAccountDisplay" class="receive-account-text">-</span>
+              </div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="closeModal('receiveMoneyModal')">Close</button>
+          </div>
+        </div>
+      </div>
+
       <div id="fixedExpensesModal" class="modal">
         <div class="modal-content modal-content-wide">
           <h2>📋 Fixed Expenses</h2>
@@ -945,6 +971,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="/scripts/app.js"></script>
 </body>
 </html>

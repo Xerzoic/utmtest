@@ -109,10 +109,10 @@ class ResilienceEngine {
     )
 
     const movementReason = debtPressure > 40
-      ? 'Debt risk events increased this week.'
+      ? 'Debt risk events increased this week. Activate autopilot protection now.'
       : (savingsRate >= 20 ? 'Healthy savings rate improved your score.' : 'Savings rate needs improvement.')
     const nextBestAction = debtPressure > 40
-      ? 'Activate debt-trap protection and reduce discretionary spend by RM50 this week.'
+      ? 'Activate autopilot debt-trap protection and reduce discretionary spend by RM50 this week.'
       : 'Enable an autopilot playbook and keep a 7-day streak.'
 
     await db.query(
@@ -372,6 +372,46 @@ class ResilienceEngine {
       params
     )
     return result.rows
+  }
+
+  async computeRunwayBreakdown(userId) {
+    const monthlySpend = await db.query(
+      `SELECT COALESCE(AVG(monthly), 0) AS avg_monthly FROM (
+        SELECT strftime('%Y-%m', transaction_date) AS month, COALESCE(SUM(amount), 0) AS monthly
+        FROM transactions WHERE user_id = $1 AND type = 'debit' AND transaction_date >= datetime('now', '-90 days')
+        GROUP BY strftime('%Y-%m', transaction_date)
+      )`,
+      [userId]
+    )
+    const avgMonthlySpend = parseFloat(monthlySpend.rows[0]?.avg_monthly || 0)
+
+    const emergency = await db.query(
+      `SELECT COALESCE(SUM(current_amount), 0) AS total FROM goals WHERE user_id = $1 AND category = 'emergency' AND is_active = 1`,
+      [userId]
+    )
+    const emergencyFund = parseFloat(emergency.rows[0]?.total || 0)
+
+    const dailyAvg = avgMonthlySpend > 0 ? avgMonthlySpend / 30 : 0
+    const survivalDays = dailyAvg > 0 ? Math.floor(emergencyFund / dailyAvg) : 0
+
+    const spend30 = await db.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions WHERE user_id = $1 AND type = 'debit' AND transaction_date >= datetime('now', '-30 days')`,
+      [userId]
+    )
+    const last30Spend = parseFloat(spend30.rows[0]?.total || 0)
+
+    return {
+      emergencyFund: Number(emergencyFund.toFixed(2)),
+      avgMonthlySpend: Number(avgMonthlySpend.toFixed(2)),
+      last30DaysSpend: Number(last30Spend.toFixed(2)),
+      dailyAvg: Number(dailyAvg.toFixed(2)),
+      survivalDays,
+      breakdownText: emergencyFund > 0 && avgMonthlySpend > 0
+        ? `Based on your average monthly spending of RM${avgMonthlySpend.toFixed(0)} over the last 3 months, your current savings of RM${emergencyFund.toFixed(0)} can sustain you for exactly ${survivalDays} days.`
+        : emergencyFund > 0
+          ? `Your emergency fund of RM${emergencyFund.toFixed(0)} is ready. Start logging expenses to see your exact runway.`
+          : `Set up an emergency fund goal to calculate your financial runway.`,
+    }
   }
 }
 

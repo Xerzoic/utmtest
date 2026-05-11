@@ -865,6 +865,46 @@ function timeAgo(dateStr) {
   return Math.floor(hrs / 24) + "d ago";
 }
 
+function drawVolatilityWave(volatility) {
+  var canvas = document.getElementById("volatilityCanvas");
+  if (!canvas) return;
+  var ctx = canvas.getContext("2d");
+  var w = canvas.width;
+  var h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  var isJagged = volatility > 50;
+  var amplitude = Math.min(18, 5 + (volatility / 100) * 14);
+  var frequency = isJagged ? 0.12 : 0.04;
+  var color = volatility >= 70 ? "#ef4444" : volatility >= 40 ? "#f59e0b" : "#10b981";
+  var mid = h / 2;
+
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+
+  for (var x = 0; x < w; x++) {
+    var y = mid + Math.sin(x * frequency) * amplitude;
+    if (isJagged) {
+      y += (Math.random() - 0.5) * (volatility / 100) * 12;
+    }
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Fill area beneath wave
+  ctx.lineTo(w, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  var grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, color + "30");
+  grad.addColorStop(1, color + "05");
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
 function getCategoryEmoji(category) {
   const emojis = { food: "🍔", transport: "🚗", shopping: "🛍️", entertainment: "🎬", bills: "💡", health: "🏥", education: "📚", groceries: "🛒", other: "📌" };
   return emojis[category] || "📌";
@@ -1002,6 +1042,32 @@ function loadTransactionHistory() {
   });
 }
 function closeModal(modalId) { document.getElementById(modalId).classList.remove("open"); }
+
+function openReceiveModal() {
+  document.getElementById("receiveMoneyModal").classList.add("open");
+  var el = document.getElementById("receiveQrCode");
+  el.innerHTML = "";
+  var phone = state.user?.phone || "-";
+  var acct = state.user?.gxbank_account_id || "-";
+  document.getElementById("receivePhoneDisplay").textContent = phone;
+  document.getElementById("receiveAccountDisplay").textContent = acct;
+  if (typeof QRCode !== "undefined" && phone !== "-") {
+    new QRCode(el, { text: phone, width: 180, height: 180, colorDark: "#00d4aa", colorLight: "#1a1a2e" });
+  } else {
+    el.textContent = "Unable to generate QR code";
+  }
+}
+
+function copyReceiveInfo() {
+  var phone = document.getElementById("receivePhoneDisplay").textContent;
+  if (phone && phone !== "-") {
+    navigator.clipboard.writeText(phone).then(function() {
+      showNudgeToast({ title: "Copied!", message: "Phone number copied to clipboard", priority: "normal" });
+    }).catch(function() {
+      alert("Phone: " + phone);
+    });
+  }
+}
 
 function openSendMoneyModal() {
   document.getElementById("sendPhone").value = "";
@@ -1270,6 +1336,17 @@ function saveAutopilotSetup() {
     loadAutopilot();
     showTab("goals");
   });
+}
+
+async function quickEnableAutopilot() {
+  var result = await api("/autopilot/quick-enable", { method: "POST" });
+  if (result && result.success) {
+    showNudgeToast({ title: "Autopilot Activated!", message: result.message || "20% of income now auto-allocated to savings.", priority: "normal" });
+    loadAutopilot();
+    refreshResilience();
+  } else {
+    showNudgeToast({ title: "Failed", message: "Could not enable autopilot", priority: "high" });
+  }
 }
 
 function toggleAutopilot() {
@@ -2014,17 +2091,54 @@ async function saveOnboardingSegment() {
 
 async function refreshResilience() {
   var data = await api("/resilience/score");
+  var runwayData = await api("/resilience/runway-breakdown");
   var card = document.getElementById("resilienceCard");
   if (!card || !data) return;
   var scoreClass = data.score >= 75 ? "tip-low" : data.score >= 50 ? "tip-medium" : "tip-high";
+
+  // Toggle dashboard border based on score < 50
+  var appEl = document.getElementById("app");
+  if (data.score < 50) {
+    appEl.classList.add("score-low");
+  } else {
+    appEl.classList.remove("score-low");
+  }
+
+  var runwayDetail = "";
+  if (runwayData && runwayData.breakdownText) {
+    runwayDetail = "<div class='runway-breakdown' id='runwayBreakdown'>" +
+      "<div class='runway-text'>" + runwayData.breakdownText + "</div>" +
+      "<div class='runway-stats'>" +
+        "<span>Emergency Fund: RM" + (runwayData.emergencyFund || 0).toLocaleString() + "</span>" +
+        "<span>Avg Monthly Spend: RM" + (runwayData.avgMonthlySpend || 0).toLocaleString() + "</span>" +
+        "<span>Survival Days: " + (runwayData.survivalDays || 0) + "</span>" +
+      "</div>" +
+    "</div>";
+  }
+
+  var volatility = data.spendingVolatility || 0;
   card.innerHTML =
     "<div class='tip-item " + scoreClass + "'>" +
       "<p><strong>Score:</strong> " + data.score + "/100</p>" +
-      "<p>Savings rate: " + (data.savingsRate || 0) + "% • Runway: " + (data.emergencyRunwayMonths || 0) + " months</p>" +
-      "<p>Debt pressure: " + (data.debtPressure || 0) + " • Volatility: " + (data.spendingVolatility || 0) + "</p>" +
+      "<p>Savings rate: " + (data.savingsRate || 0) + "% • <span class='runway-clickable' onclick='toggleRunwayBreakdown()'>Runway: " + (data.emergencyRunwayMonths || 0) + " months <span class='runway-hint'>(click for details)</span></span></p>" +
+      "<p>Debt pressure: " + (data.debtPressure || 0) + " • Volatility: " + volatility + "</p>" +
+      "<div class='volatility-wave'><canvas id='volatilityCanvas' width='380' height='40'></canvas></div>" +
       "<p><strong>What changed today:</strong> " + (data.movementReason || "-") + "</p>" +
-      "<p><strong>Next best action:</strong> " + (data.nextBestAction || "-") + "</p>" +
+      "<p class='next-best-action'><strong>Next best action:</strong> " + (data.nextBestAction || "-") +
+        (data.nextBestAction && data.nextBestAction.toLowerCase().includes("autopilot")
+          ? " <button class='btn-start-autopilot btn-sm' onclick='quickEnableAutopilot()'>[Start/Enable]</button>"
+          : "") +
+      "</p>" +
+      runwayDetail +
     "</div>";
+  drawVolatilityWave(volatility);
+}
+
+function toggleRunwayBreakdown() {
+  var el = document.getElementById("runwayBreakdown");
+  if (el) {
+    el.classList.toggle("open");
+  }
 }
 
 async function runDebtRiskScan() {

@@ -18,7 +18,7 @@ class DashboardController {
       const userId = req.user.id
 
       const [user, goals, streak, profile, budgets, recentNudges, autoSaveSummary] = await Promise.all([
-        db.query(`SELECT id, full_name, email, monthly_income, risk_profile FROM users WHERE id = $1`, [userId]),
+        db.query(`SELECT id, full_name, email, phone, gxbank_account_id, monthly_income, risk_profile FROM users WHERE id = $1`, [userId]),
         db.query(`SELECT * FROM goals WHERE user_id = $1 AND is_active = true ORDER BY priority`, [userId]),
         db.query(`SELECT * FROM savings_streaks WHERE user_id = $1`, [userId]),
         db.query(`SELECT xp, level, total_badges FROM gamification_profiles WHERE user_id = $1`, [userId]),
@@ -844,6 +844,16 @@ class DashboardController {
     }
   }
 
+  async getRunwayBreakdown(req, res) {
+    try {
+      const userId = req.user.id
+      const breakdown = await resilienceEngine.computeRunwayBreakdown(userId)
+      res.json(breakdown)
+    } catch (error) {
+      res.status(500).json({ error: error.message })
+    }
+  }
+
   async getDebtRisks(req, res) {
     try {
       const userId = req.user.id
@@ -1102,6 +1112,36 @@ class DashboardController {
         [isActive ? 1 : 0, userId]
       )
       res.json({ success: true })
+    } catch (error) { res.status(500).json({ error: error.message }) }
+  }
+
+  async quickEnableAutopilot(req, res) {
+    try {
+      const userId = req.user.id
+      // Get last month income
+      const lastMonthIncome = await db.query(
+        `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+         WHERE user_id = $1 AND type = 'credit'
+         AND strftime('%Y-%m', transaction_date) = strftime('%Y-%m', 'now', '-1 month')`,
+        [userId]
+      )
+      const income = Math.max(parseFloat(lastMonthIncome.rows[0]?.total || 0), 1)
+      // Withhold 20%: 10% emergency, 10% savings goals
+      const emergencyPct = 10
+      const savingsPct = 10
+      const savingsTotal = emergencyPct + savingsPct
+      const bills = 0
+      const dailyTotal = income - (income * savingsTotal / 100) - bills
+      await db.query(
+        `INSERT INTO autopilot_settings (id, user_id, is_active, last_month_income, emergency_fund_pct, savings_goals_pct, fixed_bills_monthly, daily_spending_total)
+         VALUES (gen_random_uuid(), $1, 1, $2, $3, $4, $5, $6)
+         ON CONFLICT(user_id) DO UPDATE SET
+           is_active = 1, last_month_income = $2, emergency_fund_pct = $3,
+           savings_goals_pct = $4, fixed_bills_monthly = $5, daily_spending_total = $6,
+           updated_at = datetime('now')`,
+        [userId, income, emergencyPct, savingsPct, bills, dailyTotal]
+      )
+      res.json({ success: true, message: 'Autopilot enabled! 20% of income will be auto-allocated to savings.', settings: { income, emergencyPct, savingsPct, dailyTotal } })
     } catch (error) { res.status(500).json({ error: error.message }) }
   }
 

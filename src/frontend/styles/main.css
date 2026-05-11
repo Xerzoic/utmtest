@@ -193,6 +193,12 @@ body {
   min-height: 100vh;
   position: relative;
   padding-bottom: 80px;
+  border: 3px solid transparent;
+  transition: border-color 0.5s ease;
+}
+#app.score-low {
+  border-color: rgba(239, 68, 68, 0.25);
+  box-shadow: inset 0 0 60px rgba(239, 68, 68, 0.06);
 }
 
 .header {
@@ -941,6 +947,20 @@ body {
 .send-form { margin-bottom: 4px; }
 .send-form label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; margin-top: 12px; }
 .send-form input { width: 100%; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-family: inherit; font-size: 14px; box-sizing: border-box; }
+
+.receive-modal-content { text-align: center; }
+.receive-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+.receive-qr-section { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-bottom: 20px; }
+.receive-qr-container { background: #fff; padding: 12px; border-radius: var(--radius-sm); display: inline-flex; }
+.receive-qr-container img, .receive-qr-container canvas { display: block; }
+.receive-details { width: 100%; text-align: left; }
+.receive-details label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; margin-top: 12px; }
+.receive-phone-row { display: flex; align-items: center; gap: 8px; background: var(--bg); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.receive-phone-text { font-size: 16px; font-weight: 700; color: var(--text); flex: 1; letter-spacing: 1px; }
+.receive-account-row { display: flex; align-items: center; gap: 8px; background: var(--bg); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.receive-account-text { font-size: 13px; color: var(--text-secondary); flex: 1; }
+.btn-icon { background: none; border: none; cursor: pointer; font-size: 18px; padding: 2px; line-height: 1; }
+
 .qr-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; background: var(--bg); border: 2px dashed var(--border); border-radius: var(--radius-sm); min-height: 160px; }
 .qr-icon { font-size: 36px; margin-bottom: 8px; }
 .qr-hint { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; text-align: center; }
@@ -1777,4 +1797,84 @@ body {
 .pet-widget.mood-weak .pet-svg,
 .pet-widget.mood-critical .pet-svg {
   filter: saturate(0.5) brightness(0.85);
+}
+
+/* === Runway Transparency === */
+.runway-clickable {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--primary);
+  transition: all 0.2s;
+}
+.runway-clickable:hover {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.runway-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.runway-breakdown {
+  display: none;
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--primary);
+  animation: fadeSlideUp 0.3s ease-out;
+}
+.runway-breakdown.open {
+  display: block;
+}
+.runway-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.runway-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.runway-stats span {
+  background: var(--bg-card);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+/* === One-Click Autopilot === */
+.btn-start-autopilot {
+  background: var(--primary);
+  color: var(--bg);
+  border: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  margin-left: 6px;
+  vertical-align: middle;
+  transition: all 0.2s;
+}
+.btn-start-autopilot:hover {
+  filter: brightness(1.1);
+  transform: scale(1.05);
+}
+
+/* === Volatility Waveform === */
+.volatility-wave {
+  margin-top: 8px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg);
+}
+.volatility-wave canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
